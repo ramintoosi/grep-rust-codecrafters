@@ -12,6 +12,9 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     else if pattern == r"\w" {
         return input_line.chars().any(|c| c.is_alphanumeric() || c == '_')
     }
+    else if pattern.starts_with("[") && pattern.ends_with("]") {
+        return input_line.chars().any(|c| pattern.contains(c));
+    }
     else {
         panic!("Unhandled pattern: {}", pattern)
     }
