@@ -10,7 +10,7 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
         return input_line.chars().any(|c| c.is_digit(10))
     }
     else if pattern == r"\w" {
-        return input_line.chars().any(|c| c.is_alphanumeric())
+        return input_line.chars().any(|c| c.is_alphanumeric() || c == '_')
     }
     else {
         panic!("Unhandled pattern: {}", pattern)
