@@ -14,10 +14,10 @@ fn match_pattern(input_line: &str, pattern: &str) -> bool {
     }
     else if pattern.starts_with("[") && pattern.ends_with("]") {
         if pattern.starts_with("[^") {
-            return !input_line.chars().any(|c| pattern[1..pattern.len()-1].contains(c));
+            return !input_line.chars().all(|c| pattern[2..pattern.len()-1].contains(c));
         }
         else {
-            return input_line.chars().any(|c| pattern[2..pattern.len()-1].contains(c));
+            return input_line.chars().any(|c| pattern[1..pattern.len()-1].contains(c));
         }
     }
     else {
