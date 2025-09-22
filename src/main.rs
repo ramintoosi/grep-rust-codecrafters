@@ -5,7 +5,7 @@ use std::process;
 
 fn find_pattern(pattern: &str) -> (bool, String) {
 
-    let special_chars: Vec<char> = r"\[".chars().collect();
+    let special_chars: Vec<char> = r"\[$".chars().collect();
     let mut current_pattern = String::new();
     let mut flag_special_char = false;
     for c in pattern.chars() {
@@ -17,6 +17,7 @@ fn find_pattern(pattern: &str) -> (bool, String) {
             else {
                 current_pattern.push(c);
                 flag_special_char = true;
+                if c == '$' {break;}
             }
         }
         else if c == '^' {
@@ -65,12 +66,16 @@ fn match_literal_pattern(input_line: &str, pattern: &str) -> (bool, usize) {
 }
 
 fn match_pattern_recursive(input_line: &str, pattern: &str) -> bool {
+    // println!("input_line: {}, pattern: {}", input_line.trim(), pattern.trim());
     if pattern.len() == 0 {return true;}
+    if pattern == "$" {return input_line.len() == 0;}
+    // if pattern.starts_with("^") {return input_line.starts_with(&pattern[1..].to_string());}
+
     let (is_special_pattern, current_pattern) = find_pattern(pattern);
     let remaining_pattern = pattern[current_pattern.len()..].to_string();
     let match_flag: bool;
     let index: usize;
-    // println!("input_line: {}, pattern: {}, current_pattern: {}, remaining_pattern: {}", input_line.trim(), pattern.trim(), current_pattern.trim(), remaining_pattern.trim());
+    // println!("current_pattern: {}, remaining_pattern: {}", current_pattern.trim(), remaining_pattern.trim());
     if is_special_pattern {
         (match_flag, index) = match_special_pattern(input_line, &current_pattern);
     }
