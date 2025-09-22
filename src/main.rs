@@ -19,6 +19,12 @@ fn find_pattern(pattern: &str) -> (bool, String) {
                 flag_special_char = true;
             }
         }
+        else if c == '^' {
+            current_pattern.push(c);
+            if !flag_special_char {
+                flag_special_char = true;
+            }
+        }
         else {
             current_pattern.push(c);
             if flag_special_char {
@@ -36,12 +42,14 @@ fn find_pattern(pattern: &str) -> (bool, String) {
 }
 
 fn match_special_pattern(input_line: &str, pattern: &str) -> (bool, usize){
+    if pattern.starts_with('^') {
+        return (input_line.starts_with(&pattern[1..].to_string()), pattern.len() - 2);
+    }
     for (index, c) in input_line.chars().enumerate() {
         if pattern == r"\d" && c.is_digit(10) {return (true, index);}
         else if pattern == r"\w" && (c.is_alphanumeric() || c == '_') {return (true, index);}
         else if pattern.starts_with("[^") {if !pattern[1..pattern.len()-1].contains(c) {return (true, index);}}
         else if pattern.starts_with("[") {if pattern[1..pattern.len()-1].contains(c) {return (true, index);}}
-
     }
     return (false, 0);
 
@@ -76,28 +84,6 @@ fn match_pattern_recursive(input_line: &str, pattern: &str) -> bool {
     else {return false}
 }
 
-// fn match_pattern(input_line: &str, pattern: &str) -> bool {
-//     if pattern.chars().count() == 1 {
-//             return input_line.contains(pattern);
-//     }
-//     else if pattern == r"\d" {
-//         return input_line.chars().any(|c| c.is_digit(10))
-//     }
-//     else if pattern == r"\w" {
-//         return input_line.chars().any(|c| c.is_alphanumeric() || c == '_')
-//     }
-//     else if pattern.starts_with("[") && pattern.ends_with("]") {
-//         if pattern.starts_with("[^") {
-//             return !input_line.chars().all(|c| pattern[2..pattern.len()-1].contains(c));
-//         }
-//         else {
-//             return input_line.chars().any(|c| pattern[1..pattern.len()-1].contains(c));
-//         }
-//     }
-//     else {
-//         panic!("Unhandled pattern: {}", pattern)
-//     }
-// }
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
 fn main() {
