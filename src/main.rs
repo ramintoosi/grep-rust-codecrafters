@@ -26,7 +26,7 @@ fn find_pattern(pattern: &str) -> (bool, String) {
                 flag_special_char = true;
             }
         }
-        else if c == '+' {
+        else if c == '+' || c == '?' {
             if current_pattern.len() == 1 {
                 current_pattern.push(c);
                 flag_special_char = true;
@@ -58,15 +58,16 @@ fn find_pattern(pattern: &str) -> (bool, String) {
 }
 
 fn match_special_pattern(input_line: &str, pattern: &str) -> (bool, usize){
+    if pattern.ends_with('?') {return (true, 0);}
     if pattern.starts_with('^') {
-        return (input_line.starts_with(&pattern[1..].to_string()), pattern.len() - 2);
+        return (input_line.starts_with(&pattern[1..].to_string()), pattern.len() - 1);
     }
     for (index, c) in input_line.chars().enumerate() {
-        if pattern == r"\d" && c.is_digit(10) {return (true, index);}
-        else if pattern == r"\w" && (c.is_alphanumeric() || c == '_') {return (true, index);}
-        else if pattern.starts_with("[^") {if !pattern[1..pattern.len()-1].contains(c) {return (true, index);}}
-        else if pattern.starts_with("[") {if pattern[1..pattern.len()-1].contains(c) {return (true, index);}}
-        else if pattern.ends_with("+") && input_line.contains(c) {return (true, index);}
+        if pattern == r"\d" && c.is_digit(10) {return (true, index+1);}
+        else if pattern == r"\w" && (c.is_alphanumeric() || c == '_') {return (true, index+1);}
+        else if pattern.starts_with("[^") {if !pattern[1..pattern.len()-1].contains(c) {return (true, index+1);}}
+        else if pattern.starts_with("[") {if pattern[1..pattern.len()-1].contains(c) {return (true, index+1);}}
+        else if pattern.ends_with("+") && input_line.contains(c) {return (true, index+1);}
     }
     return (false, 0);
 
@@ -74,7 +75,7 @@ fn match_special_pattern(input_line: &str, pattern: &str) -> (bool, usize){
 
 fn match_literal_pattern(input_line: &str, pattern: &str) -> (bool, usize) {
     if let Some(start_index) = input_line.find(pattern) {
-        return (true, start_index + pattern.len()-1);
+        return (true, start_index + pattern.len());
     }
     else {
         return (false, 0);
@@ -85,7 +86,6 @@ fn match_pattern_recursive(input_line: &str, pattern: &str) -> bool {
     // println!("input_line: {}, pattern: {}", input_line.trim(), pattern.trim());
     if pattern.len() == 0 {return true;}
     if pattern == "$" {return input_line.len() == 0;}
-    // if pattern.starts_with("^") {return input_line.starts_with(&pattern[1..].to_string());}
 
     let (is_special_pattern, current_pattern) = find_pattern(pattern);
     let remaining_pattern = pattern[current_pattern.len()..].to_string();
@@ -100,7 +100,11 @@ fn match_pattern_recursive(input_line: &str, pattern: &str) -> bool {
     }
     // println!("match_flag: {}, index: {}", match_flag, index);
     if match_flag {
-        return match_pattern_recursive(&input_line[index+1..], &remaining_pattern);
+        if input_line.len() == 0 && current_pattern.len() > 0 {
+            if current_pattern.ends_with('?') {return true;}
+            else {return false;}
+        }
+        return match_pattern_recursive(&input_line[index..], &remaining_pattern);
     }
     else {return false}
 }
