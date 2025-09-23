@@ -5,7 +5,7 @@ use std::process;
 
 fn find_pattern(pattern: &str) -> (bool, String) {
 
-    let special_chars: Vec<char> = r"\[$.".chars().collect();
+    let special_chars: Vec<char> = r"\[$".chars().collect();
     let special_chars_match: Vec<char> = r"+?".chars().collect();
     let mut current_pattern = String::new();
     let mut flag_special_char = false;
@@ -18,7 +18,6 @@ fn find_pattern(pattern: &str) -> (bool, String) {
             else {
                 current_pattern.push(c);
                 flag_special_char = true;
-                if c == '$' || c == '.' {break;}
             }
         }
         else if c == '^' {
@@ -60,7 +59,6 @@ fn find_pattern(pattern: &str) -> (bool, String) {
 
 fn match_special_pattern(input_line: &str, pattern: &str) -> (bool, usize){
     if pattern.ends_with('?') {return (true, 0);}
-    if pattern.ends_with('.') {return (true, 1);}
     if pattern.starts_with('^') {
         return (input_line.starts_with(&pattern[1..].to_string()), pattern.len() - 1);
     }
@@ -69,19 +67,33 @@ fn match_special_pattern(input_line: &str, pattern: &str) -> (bool, usize){
         else if pattern == r"\w" && (c.is_alphanumeric() || c == '_') {return (true, index+1);}
         else if pattern.starts_with("[^") {if !pattern[1..pattern.len()-1].contains(c) {return (true, index+1);}}
         else if pattern.starts_with("[") {if pattern[1..pattern.len()-1].contains(c) {return (true, index+1);}}
-        else if pattern.ends_with("+") && input_line.contains(c) {return (true, index+1);}
+        else if pattern.ends_with("+") && (pattern.contains(c) || pattern == ".+") {return (true, index+1);}
     }
     return (false, 0);
 
 }
 
 fn match_literal_pattern(input_line: &str, pattern: &str) -> (bool, usize) {
-    if let Some(start_index) = input_line.find(pattern) {
-        return (true, start_index + pattern.len());
+    // if let Some(start_index) = input_line.find(pattern) {
+    //     return (true, start_index + pattern.len());
+    // }
+    // else {
+    //     return (false, 0);
+    // };
+    for (index, _) in input_line.char_indices() {
+        let mut matched_inside = true;
+        for (c_input_2, c_pattern) in input_line[index..].chars().zip(pattern.chars()) {
+            // println!("c_pattern: {}, c_input: {}", c_pattern, c_input_2);
+            if c_pattern != c_input_2 && c_pattern != '.' {
+                matched_inside = false;
+                break;
+            }
+        }
+        if matched_inside {
+            return (true, index + pattern.len());
+        }
     }
-    else {
-        return (false, 0);
-    };
+    return (false, 0);
 }
 
 fn match_pattern_recursive(input_line: &str, pattern: &str) -> bool {
