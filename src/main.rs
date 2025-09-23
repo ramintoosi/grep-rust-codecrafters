@@ -5,19 +5,20 @@ use std::process;
 
 fn find_pattern(pattern: &str) -> (bool, String) {
 
-    let special_chars: Vec<char> = r"\[$".chars().collect();
+    let special_chars: Vec<char> = r"\[$.".chars().collect();
+    let special_chars_match: Vec<char> = r"+?".chars().collect();
     let mut current_pattern = String::new();
     let mut flag_special_char = false;
     for c in pattern.chars() {
         if special_chars.contains(&c) {
             if current_pattern.len() > 0{
-                // it means we already have a patter so we should not open a new special pattern
-                if c != '+' {break;}    
+                // it means we already have a pattern so we should not open a new special pattern
+                if c != '+' {break;}
             }
             else {
                 current_pattern.push(c);
                 flag_special_char = true;
-                if c == '$' {break;}
+                if c == '$' || c == '.' {break;}
             }
         }
         else if c == '^' {
@@ -26,7 +27,7 @@ fn find_pattern(pattern: &str) -> (bool, String) {
                 flag_special_char = true;
             }
         }
-        else if c == '+' || c == '?' {
+        else if special_chars_match.contains(&c) {
             if current_pattern.len() == 1 {
                 current_pattern.push(c);
                 flag_special_char = true;
@@ -59,6 +60,7 @@ fn find_pattern(pattern: &str) -> (bool, String) {
 
 fn match_special_pattern(input_line: &str, pattern: &str) -> (bool, usize){
     if pattern.ends_with('?') {return (true, 0);}
+    if pattern.ends_with('.') {return (true, 1);}
     if pattern.starts_with('^') {
         return (input_line.starts_with(&pattern[1..].to_string()), pattern.len() - 1);
     }
