@@ -97,5 +97,74 @@ impl<'a> Parser<'a> {
         }
         None
     }
+
+    pub fn split_alternatives(group: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        let mut alter = String::new();
+        let mut depth = 0;
+        for c in group[1..group.len() - 1].chars() {
+            alter.push(c);
+            if c == '|' && depth == 0 {
+                alter.pop();
+                result.push(alter);
+                alter = String::new();
+            }
+            else if c == '(' {
+                depth += 1;
+            }
+            else if c == ')' {
+                depth -= 1;
+            }
+        }
+        if !alter.is_empty() {result.push(alter);}
+        result
+    }
+
+    pub fn match_pattern(input: &str, pattern: &str) -> bool {
+        let mut parser = Parser::new(pattern);
+        Self::match_pattern_internal(input, &mut parser)
+    }
+
+    fn match_pattern_internal(input: &str, parser: &mut Parser) -> bool {
+        println!("input: {}, pattern: {:?}", input, parser.chars);
+
+        if input.is_empty() && !parser.peek().is_none() {
+            return false;
+        }
+
+        if parser.peek().is_none() {
+            return true;
+        }
+
+        if let Some(cls) = parser.parse_parentheses() {
+            let alternates = Self::split_alternatives(&cls);
+            for alternate in alternates {
+                let mut new_parser = Parser::new(&alternate);
+                if Self::match_pattern_internal(input, &mut new_parser) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if let Some(_) = parser.parse_dot() {
+            if input.is_empty() { return false; }
+            return Self::match_pattern_internal(&input[1..], parser);
+        }
+
+        let literal = parser.parse_literal();
+        if !literal.is_empty() {
+            if input.starts_with(&literal) {
+                return Self::match_pattern_internal(&input[literal.len()..], parser);
+            }
+            else {
+                return false;
+            }
+        }
+
+
+        false
+
+    }
 }
 

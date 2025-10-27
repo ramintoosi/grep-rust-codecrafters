@@ -109,4 +109,44 @@ mod tests {
         let mut parser = Parser::new("(abc");
         let _ = parser.parse_parentheses();
     }
+    #[test]
+    fn test_split_alternatives_basic() {
+        let group = "(cat|dog|mouse)";
+        let alts = Parser::split_alternatives(group);
+        assert_eq!(alts, vec!["cat", "dog", "mouse"]);
+    }
+
+    #[test]
+    fn test_split_alternatives_nested() {
+        let group = "(a|(b|c)|d)";
+        let alts = Parser::split_alternatives(group);
+        assert_eq!(alts, vec!["a", "(b|c)", "d"]);
+    }
+
+    #[test]
+    fn test_match_literal() {
+        assert!(Parser::match_pattern("hello", "hello"));
+        assert!(!Parser::match_pattern("hello", "world"));
+    }
+
+    #[test]
+    fn test_match_dot() {
+        assert!(Parser::match_pattern("a", "."));
+        assert!(!Parser::match_pattern("", "."));
+    }
+
+    #[test]
+    fn test_match_alternatives() {
+        assert!(Parser::match_pattern("cat", "(cat|dog)"));
+        assert!(Parser::match_pattern("dog", "(cat|dog)"));
+        assert!(!Parser::match_pattern("mouse", "(cat|dog)"));
+    }
+
+    #[test]
+    fn test_match_combined() {
+        assert!(Parser::match_pattern("catdog", "(cat|dog)dog"));
+        assert!(Parser::match_pattern("dogdog", "(cat|dog)dog"));
+    }
+
+
 }
