@@ -47,6 +47,19 @@ impl<'a> Parser<'a> {
 
         literal
     }
+
+    fn parse_dot(&mut self) -> Option<String> {
+        if let Some(c) = self.peek() {
+            if c == '.' {
+                self.next();
+                Some(".".to_string())
+            }
+            else {
+                None
+            }
+        }
+        else {None}
+    }
     
 }
 
@@ -78,6 +91,21 @@ mod tests {
         let mut parser = Parser::new("simpletext");
         let literal = parser.parse_literal();
         assert_eq!(literal, "simpletext"); // consumes entire input
+    }
+    #[test]
+    fn test_parse_dot_when_dot_present() {
+        let mut parser = Parser::new(".abc");
+        let dot = parser.parse_dot();
+        assert_eq!(dot, Some(".".to_string()));
+        assert_eq!(parser.chars.collect::<String>(), "abc"); // dot consumed
+    }
+    
+    #[test]
+    fn test_parse_dot_when_no_dot() {
+        let mut parser = Parser::new("abc");
+        let dot = parser.parse_dot();
+        assert_eq!(dot, None);
+        assert_eq!(parser.chars.collect::<String>(), "abc"); // nothing consumed
     }
 }
 
