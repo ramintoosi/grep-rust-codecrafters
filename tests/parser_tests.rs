@@ -86,4 +86,27 @@ mod tests {
         assert_eq!(q, None);
         assert_eq!(parser.chars.collect::<String>(), "abc"); // unchanged
     }
+
+    #[test]
+    fn test_parse_parentheses_basic() {
+        let mut parser = Parser::new("(cat|dog)+");
+        let group = parser.parse_parentheses();
+        assert_eq!(group, Some("(cat|dog)".to_string()));
+        assert_eq!(parser.peek(), Some('+'));
+    }
+
+    #[test]
+    fn test_parse_parentheses_nested() {
+        let mut parser = Parser::new("(a|(b|c))end");
+        let group = parser.parse_parentheses();
+        assert_eq!(group, Some("(a|(b|c))".to_string()));
+        assert_eq!(parser.peek(), Some('e'));
+    }
+
+    #[test]
+    #[should_panic(expected = "Unclosed parentheses")]
+    fn test_parse_parentheses_unclosed() {
+        let mut parser = Parser::new("(abc");
+        let _ = parser.parse_parentheses();
+    }
 }

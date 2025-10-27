@@ -11,11 +11,11 @@ impl<'a> Parser<'a> {
         Self {chars: pattern.chars().peekable()}
     }
 
-    fn next(&mut self) -> Option<char>{
+    pub fn next(&mut self) -> Option<char>{
         self.chars.next()
     }
 
-    fn peek(&mut self) -> Option<char> {
+    pub fn peek(&mut self) -> Option<char> {
         self.chars.peek().copied()
     }
 
@@ -74,6 +74,28 @@ impl<'a> Parser<'a> {
         }
         None
     }
-    
+
+    pub fn parse_parentheses(&mut self) -> Option<String> {
+        if let Some(c) = self.peek() {
+            let mut depth = 0;
+            if c == '(' {
+                let mut result = String::new();
+                while let Some(c) = self.next() {
+                    result.push(c);
+                    if c == ')' {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some(result);
+                        }
+                    }
+                    else if c == '(' {
+                        depth += 1;
+                    }
+                }
+                panic!("Unclosed parentheses");
+            }
+        }
+        None
+    }
 }
 
