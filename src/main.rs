@@ -60,6 +60,23 @@ impl<'a> Parser<'a> {
         }
         else {None}
     }
+
+    fn parse_char_class(&mut self) -> Option<String> {
+        if let Some(c) = self.peek() {
+            if c == '[' {
+                let mut result = String::new();
+                while let Some(c) = self.next() {
+                    result.push(c);
+                    if c == ']' {
+                        return Some(result);
+                    }
+                }
+                panic!("Unclosed character class");
+            }
+            else {None}
+        }
+        else {None}
+    }
     
 }
 
@@ -106,6 +123,28 @@ mod tests {
         let dot = parser.parse_dot();
         assert_eq!(dot, None);
         assert_eq!(parser.chars.collect::<String>(), "abc"); // nothing consumed
+    }
+    #[test]
+    fn test_parse_char_class_basic() {
+        let mut parser = Parser::new("[abc]+");
+        let cls = parser.parse_char_class();
+        assert_eq!(cls, Some("[abc]".to_string()));
+        assert_eq!(parser.chars.collect::<String>(), "+");
+    }
+
+    #[test]
+    fn test_parse_char_class_negated() {
+        let mut parser = Parser::new("[^xyz]end");
+        let cls = parser.parse_char_class();
+        assert_eq!(cls, Some("[^xyz]".to_string()));
+        assert_eq!(parser.chars.collect::<String>(), "end");
+    }
+
+    #[test]
+    #[should_panic(expected = "Unclosed character class")]
+    fn test_parse_char_class_unclosed() {
+        let mut parser = Parser::new("[abc");
+        let _ = parser.parse_char_class(); // should panic
     }
 }
 
