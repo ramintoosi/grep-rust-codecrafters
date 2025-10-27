@@ -77,6 +77,16 @@ impl<'a> Parser<'a> {
         }
         else {None}
     }
+
+    fn parse_quantifier(&mut self) -> Option<char> {
+        if let Some(c) = self.peek() {
+            if c == '+' || c == '?' {
+                self.next();
+                return Some(c)
+            }
+        }
+        None
+    }
     
 }
 
@@ -145,6 +155,30 @@ mod tests {
     fn test_parse_char_class_unclosed() {
         let mut parser = Parser::new("[abc");
         let _ = parser.parse_char_class(); // should panic
+    }
+
+    #[test]
+    fn test_parse_quantifier_plus() {
+        let mut parser = Parser::new("+next");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, Some('+'));
+        assert_eq!(parser.chars.collect::<String>(), "next");
+    }
+
+    #[test]
+    fn test_parse_quantifier_question() {
+        let mut parser = Parser::new("?abc");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, Some('?'));
+        assert_eq!(parser.chars.collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn test_parse_quantifier_none() {
+        let mut parser = Parser::new("abc");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, None);
+        assert_eq!(parser.chars.collect::<String>(), "abc"); // unchanged
     }
 }
 
