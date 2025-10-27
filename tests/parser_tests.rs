@@ -148,5 +148,18 @@ mod tests {
         assert!(Parser::match_pattern("dogdog", "(cat|dog)dog"));
     }
 
+    #[test]
+    fn test_match_char_class_basic() {
+        assert!(Parser::match_pattern("a", "[abc]"));
+        assert!(Parser::match_pattern("b", "[abc]"));
+        assert!(!Parser::match_pattern("d", "[abc]"));
+    }
+
+    #[test]
+    fn test_match_char_class_negated() {
+        assert!(Parser::match_pattern("d", "[^abc]"));
+        assert!(!Parser::match_pattern("a", "[^abc]"));
+    }
+
 
 }

@@ -136,6 +136,19 @@ impl<'a> Parser<'a> {
             return true;
         }
 
+        if let Some(cls) = parser.parse_char_class() {
+            for c in input.chars() {
+                if cls.contains(c) && !cls.starts_with("[^") {
+                    return true;
+                }
+                else if cls.starts_with("[^") && !cls.contains(c) {
+                    return true;
+                }
+            }
+            return false;
+
+        }
+
         if let Some(cls) = parser.parse_parentheses() {
             let alternates = Self::split_alternatives(&cls);
             for alternate in alternates {
