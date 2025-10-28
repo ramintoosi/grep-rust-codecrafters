@@ -122,61 +122,85 @@ impl<'a> Parser<'a> {
 
     pub fn match_pattern(input: &str, pattern: &str) -> bool {
         let mut parser = Parser::new(pattern);
-        Self::match_pattern_internal(input, &mut parser)
+        let (flag, _) = Self::match_pattern_internal(input, &mut parser);
+        println!("-------> match pattern done flag: {}", flag);
+        flag
     }
 
-    fn match_pattern_internal(input: &str, parser: &mut Parser) -> bool {
-        println!("input: {}, pattern: {:?}", input, parser.chars);
+    fn match_pattern_internal(input: &str, parser: &mut Parser) -> (bool, i32) {
+        println!("-> input: {}, pattern: {:?}", input, &parser.chars.clone().collect::<String>());
 
         if input.is_empty() && !parser.peek().is_none() {
-            return false;
+            return (false, 0);
         }
 
         if parser.peek().is_none() {
-            return true;
+            return (true, 0);
         }
 
-        if let Some(cls) = parser.parse_char_class() {
-            for c in input.chars() {
-                if cls.contains(c) && !cls.starts_with("[^") {
-                    return true;
+        let mut token: Option<String> = None;
+        let mut input_check = input.clone().to_string();
+        let mut len_input_checked: usize = 0;
+
+
+        if let Some(token) = parser.parse_char_class() {
+            let mut flag = false;
+            for c in input_check.chars() {
+                len_input_checked += 1;
+                if token.contains(c) && !token.starts_with("[^") {
+                    flag = true;
+                    break
                 }
-                else if cls.starts_with("[^") && !cls.contains(c) {
-                    return true;
+                else if token.starts_with("[^") && !token.contains(c) {
+                    flag = true;
+                    break
                 }
             }
-            return false;
-
+            if !flag {
+                return (false, 0);
+            }
+            else {
+                input_check = input_check[len_input_checked..].to_string();
+                let (flag, len) = Self::match_pattern_internal(&input_check, parser);
+                return (flag, len);
+            }
         }
 
-        if let Some(cls) = parser.parse_parentheses() {
-            let alternates = Self::split_alternatives(&cls);
+
+        if let Some(token) = parser.parse_parentheses() {
+            let alternates = Self::split_alternatives(&token);
             for alternate in alternates {
                 let mut new_parser = Parser::new(&alternate);
-                if Self::match_pattern_internal(input, &mut new_parser) {
-                    return true;
+                let (flag, len) = Self::match_pattern_internal(&input_check, &mut new_parser);
+                if flag {
+                    input_check = input_check[len as usize..].to_string();
+                    println!("input_check: {}, pattern: {:?}", input_check, &parser.chars.clone().collect::<String>());
+                    let (flag, len_inside) = Self::match_pattern_internal(&input_check, parser);
+                    return (flag, len + len_inside);
                 }
             }
-            return false;
+            return (false, 0);
         }
 
         if let Some(_) = parser.parse_dot() {
-            if input.is_empty() { return false; }
-            return Self::match_pattern_internal(&input[1..], parser);
+            if input_check.is_empty() { return (false, 0); }
+            let (flag, len) = Self::match_pattern_internal(&input_check[1..], parser);
+            return (flag, 1 as i32 + len);
         }
 
         let literal = parser.parse_literal();
         if !literal.is_empty() {
-            if input.starts_with(&literal) {
-                return Self::match_pattern_internal(&input[literal.len()..], parser);
+            if input_check.starts_with(&literal) {
+                input_check = input_check[literal.len()..].to_string();
+                let (flag, len) = Self::match_pattern_internal(&input_check, parser);
+                return (flag, literal.len() as i32 + len);
             }
             else {
-                return false;
+                return (false, 0);
             }
         }
 
-
-        false
+        (false, 0)
 
     }
 }

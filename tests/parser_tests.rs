@@ -161,5 +161,10 @@ mod tests {
         assert!(!Parser::match_pattern("a", "[^abc]"));
     }
 
+    #[test]
+    fn test_match_char_class_negated_with_alternatives() {
+        assert!(!Parser::match_pattern("dsbiglik", "[^abc](s|g)bigli(i|e)"));
+    }
+
 
 }
