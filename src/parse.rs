@@ -1,6 +1,8 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
+
+
 pub struct Parser<'a> {
     pub chars: Peekable<Chars<'a>>
 }
@@ -44,6 +46,24 @@ impl<'a> Parser<'a> {
             else {
                 None
             }
+        }
+        else {None}
+    }
+
+    pub fn parse_slash(&mut self) -> Option<String> {
+        if let Some(c) = self.peek() {
+            if c == '\\' {
+                self.next();
+                if let Some(c) = self.peek() {
+                    if c == 'd' {
+                        self.next();
+                        Some("\\d".to_string())
+                    }
+                    else {panic!("Invalid escape sequence")}
+                }
+                else {panic!("Invalid escape sequence")}
+            }
+            else {None}
         }
         else {None}
     }
@@ -120,15 +140,50 @@ impl<'a> Parser<'a> {
         result
     }
 
+    pub fn parse_start_anchor(&mut self) -> Option<String> {
+        if let Some(c) = self.peek() {
+            if c == '^' {
+                self.next();
+                return Some("^".to_string())
+            }
+            else {return None}
+        }
+        None
+    }
+
+    pub fn parse_end_anchor(&mut self) -> Option<String> {
+        if let Some(c) = self.peek() {
+            if c == '$' {
+                self.next();
+                return Some("$".to_string());
+            }
+            else {return None};
+        }
+        None
+    }
+
     pub fn match_pattern(input: &str, pattern: &str) -> bool {
         let mut parser = Parser::new(pattern);
-        let (flag, _) = Self::match_pattern_internal(input, &mut parser);
+        let (flag, _) = Self::match_pattern_internal(input, &mut parser, false);
         println!("-------> match pattern done flag: {}", flag);
         flag
     }
 
-    fn match_pattern_internal(input: &str, parser: &mut Parser) -> (bool, i32) {
+    fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool) -> (bool, i32) {
         println!("-> input: {}, pattern: {:?}", input, &parser.chars.clone().collect::<String>());
+
+        if let Some(_) = parser.parse_start_anchor() {
+            start_anchor = true;
+        }
+
+        if let Some(_) = parser.parse_end_anchor() {
+            if input.is_empty() {
+                return (true, 0);
+            }
+            else {
+                return (false, 0);
+            }
+        }
 
         if input.is_empty() && !parser.peek().is_none() {
             return (false, 0);
@@ -138,9 +193,10 @@ impl<'a> Parser<'a> {
             return (true, 0);
         }
 
-        let mut token: Option<String> = None;
-        let mut input_check = input.clone().to_string();
+        let mut input_check = input.to_string();
         let mut len_input_checked: usize = 0;
+
+        
 
 
         if let Some(token) = parser.parse_char_class() {
@@ -159,9 +215,12 @@ impl<'a> Parser<'a> {
             if !flag {
                 return (false, 0);
             }
+            else if start_anchor && len_input_checked > 1 {
+                return (false, 0);
+            }
             else {
                 input_check = input_check[len_input_checked..].to_string();
-                let (flag, len) = Self::match_pattern_internal(&input_check, parser);
+                let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
                 return (flag, len);
             }
         }
@@ -171,12 +230,27 @@ impl<'a> Parser<'a> {
             let alternates = Self::split_alternatives(&token);
             for alternate in alternates {
                 let mut new_parser = Parser::new(&alternate);
-                let (flag, len) = Self::match_pattern_internal(&input_check, &mut new_parser);
+                let (flag, len) = Self::match_pattern_internal(&input_check, &mut new_parser, start_anchor);
                 if flag {
                     input_check = input_check[len as usize..].to_string();
                     println!("input_check: {}, pattern: {:?}", input_check, &parser.chars.clone().collect::<String>());
-                    let (flag, len_inside) = Self::match_pattern_internal(&input_check, parser);
+                    let (flag, len_inside) = Self::match_pattern_internal(&input_check, parser, false);
                     return (flag, len + len_inside);
+                }
+            }
+            return (false, 0);
+        }
+
+        if let Some(_) = parser.parse_slash() {
+            if input_check.is_empty() { return (false, 0); }
+            for (index, c) in input_check.chars().enumerate() {
+                if c.is_digit(10) {
+                    if start_anchor && index > 0 {
+                        return (false, 0);
+                    }
+                    input_check = input_check[index + 1..].to_string();
+                    let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                    return (flag, (index + 1) as i32 + len);
                 }
             }
             return (false, 0);
@@ -184,20 +258,26 @@ impl<'a> Parser<'a> {
 
         if let Some(_) = parser.parse_dot() {
             if input_check.is_empty() { return (false, 0); }
-            let (flag, len) = Self::match_pattern_internal(&input_check[1..], parser);
+            let (flag, len) = Self::match_pattern_internal(&input_check[1..], parser, false);
             return (flag, 1 as i32 + len);
         }
 
         let literal = parser.parse_literal();
         if !literal.is_empty() {
-            if input_check.starts_with(&literal) {
-                input_check = input_check[literal.len()..].to_string();
-                let (flag, len) = Self::match_pattern_internal(&input_check, parser);
-                return (flag, literal.len() as i32 + len);
+            if input_check.len() < literal.len() { return (false, 0); }
+            for index in 0..input_check.len() - literal.len() + 1 {
+                // println!("index: {}, literal: {}, input_check: {}", index, literal, &input_check[index..]);
+                if input_check[index..].starts_with(&literal) {
+                    if start_anchor && index > 0 {
+                        return (false, 0);
+                    }
+                    input_check = input_check[index + literal.len()..].to_string();
+                    let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                    return (flag, index as i32 + literal.len() as i32 + len);
+                }
             }
-            else {
-                return (false, 0);
-            }
+            
+            return (false, 0);
         }
 
         (false, 0)
