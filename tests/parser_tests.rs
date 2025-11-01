@@ -13,7 +13,7 @@ mod tests_internal_functions {
     fn test_parse_literal_basic() {
         let mut parser = Parser::new("hello+world");
         let literal = parser.parse_literal();
-        assert_eq!(literal, "hello");
+        assert_eq!(literal, Some("hello".to_string()));
         assert_eq!(parser.chars.collect::<String>(), "+world");
     }
 
@@ -21,14 +21,14 @@ mod tests_internal_functions {
     fn test_parse_literal_with_special_chars() {
         let mut parser = Parser::new("abc.def");
         let literal = parser.parse_literal();
-        assert_eq!(literal, "abc"); // stops before '.'
+        assert_eq!(literal, Some("abc".to_string())); // stops before '.'
     }
 
     #[test]
     fn test_parse_literal_full_literal() {
         let mut parser = Parser::new("simpletext");
         let literal = parser.parse_literal();
-        assert_eq!(literal, "simpletext"); // consumes entire input
+        assert_eq!(literal, Some("simpletext".to_string())); // consumes entire input
     }
 
     // Tests for parse_dot
@@ -183,7 +183,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("hello$");
         // First consume "hello"
         let literal = parser.parse_literal();
-        assert_eq!(literal, "hello");
+        assert_eq!(literal, Some("hello".to_string()));
         // Now parse the end anchor
         let anchor = parser.parse_end_anchor();
         assert_eq!(anchor, Some("$".to_string()));

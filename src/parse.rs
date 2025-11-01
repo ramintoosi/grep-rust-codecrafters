@@ -1,7 +1,12 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
-
+enum Token {
+    Literal(String),
+    CharClass(String),
+    Dot,
+    Slash,
+}
 
 pub struct Parser<'a> {
     pub chars: Peekable<Chars<'a>>
@@ -21,7 +26,7 @@ impl<'a> Parser<'a> {
         self.chars.peek().copied()
     }
 
-    pub fn parse_literal(&mut self) -> String {
+    pub fn parse_literal(&mut self) -> Option<String> {
         let mut literal = String::new();
 
         let specials = ".^$+?|()[]\\";
@@ -34,7 +39,12 @@ impl<'a> Parser<'a> {
             self.next();
         }
 
-        literal
+        if literal.is_empty() {
+            None
+        }
+        else {
+            Some(literal)
+        }
     }
 
     pub fn parse_dot(&mut self) -> Option<String> {
@@ -169,6 +179,63 @@ impl<'a> Parser<'a> {
         flag
     }
 
+    fn match_token_atom(input: &str, token: Token, start_anchor: bool) -> (bool, i32) {
+        match token {
+            Token::CharClass(token) => {
+                let mut len_input_checked: usize = 0;
+                let mut flag = false;
+                for c in input.chars() {
+                    len_input_checked += 1;
+                    if token.contains(c) && !token.starts_with("[^") {
+                        flag = true;
+                        break
+                    }
+                    else if token.starts_with("[^") && !token.contains(c) {
+                        flag = true;
+                        break
+                    }
+                }
+                if !flag {
+                    return (false, 0);
+                }
+                else if start_anchor && len_input_checked > 1 {
+                    return (false, 0);
+                }
+                else {
+                    return (flag, len_input_checked as i32);
+                }
+            }
+            Token::Slash => {
+                if input.is_empty() { return (false, 0); }
+                for (index, c) in input.chars().enumerate() {
+                    if c.is_digit(10) {
+                        if start_anchor && index > 0 {
+                            return (false, 0);
+                        }
+                        return (true, index as i32 + 1);
+                    }
+                }
+                return (false, 0);
+            }
+            Token::Dot => {
+                if input.is_empty() { return (false, 0); }
+                return (true, 1);
+            }
+            Token::Literal(token) => {
+                if input.len() < token.len() { return (false, 0); }
+                for index in 0..input.len() - token.len() + 1 {
+                    if input[index..].starts_with(&token) {
+                        if start_anchor && index > 0 {
+                            return (false, 0);
+                        }
+                        return (true, index as i32 + token.len() as i32);
+                    }
+                }
+                return (false, 0);
+            }
+        }
+    }
+
     fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool) -> (bool, i32) {
         println!("-> input: {}, pattern: {:?}", input, &parser.chars.clone().collect::<String>());
 
@@ -194,36 +261,6 @@ impl<'a> Parser<'a> {
         }
 
         let mut input_check = input.to_string();
-        let mut len_input_checked: usize = 0;
-
-        
-
-
-        if let Some(token) = parser.parse_char_class() {
-            let mut flag = false;
-            for c in input_check.chars() {
-                len_input_checked += 1;
-                if token.contains(c) && !token.starts_with("[^") {
-                    flag = true;
-                    break
-                }
-                else if token.starts_with("[^") && !token.contains(c) {
-                    flag = true;
-                    break
-                }
-            }
-            if !flag {
-                return (false, 0);
-            }
-            else if start_anchor && len_input_checked > 1 {
-                return (false, 0);
-            }
-            else {
-                input_check = input_check[len_input_checked..].to_string();
-                let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                return (flag, len);
-            }
-        }
 
 
         if let Some(token) = parser.parse_parentheses() {
@@ -241,47 +278,34 @@ impl<'a> Parser<'a> {
             return (false, 0);
         }
 
-        if let Some(_) = parser.parse_slash() {
-            if input_check.is_empty() { return (false, 0); }
-            for (index, c) in input_check.chars().enumerate() {
-                if c.is_digit(10) {
-                    if start_anchor && index > 0 {
-                        return (false, 0);
-                    }
-                    input_check = input_check[index + 1..].to_string();
-                    let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                    return (flag, (index + 1) as i32 + len);
-                }
-            }
-            return (false, 0);
+        let mut token: Option<Token> = None;
+
+        if let Some(pattern) = parser.parse_char_class() {
+            token = Some(Token::CharClass(pattern));
+        }
+        else if let Some(_) = parser.parse_slash() {
+            token = Some(Token::Slash);
+        }
+        else if let Some(_) = parser.parse_dot() {
+            token = Some(Token::Dot);
+        }
+        else if let Some(literal) = parser.parse_literal() {
+            token = Some(Token::Literal(literal));
         }
 
-        if let Some(_) = parser.parse_dot() {
-            if input_check.is_empty() { return (false, 0); }
-            let (flag, len) = Self::match_pattern_internal(&input_check[1..], parser, false);
-            return (flag, 1 as i32 + len);
-        }
-
-        let literal = parser.parse_literal();
-        if !literal.is_empty() {
-            if input_check.len() < literal.len() { return (false, 0); }
-            for index in 0..input_check.len() - literal.len() + 1 {
-                // println!("index: {}, literal: {}, input_check: {}", index, literal, &input_check[index..]);
-                if input_check[index..].starts_with(&literal) {
-                    if start_anchor && index > 0 {
-                        return (false, 0);
-                    }
-                    input_check = input_check[index + literal.len()..].to_string();
-                    let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                    return (flag, index as i32 + literal.len() as i32 + len);
-                }
+        if let Some(token) = token {
+            let (is_match, atom_len) =  Self::match_token_atom(&input_check, token, start_anchor);
+            if is_match {
+                input_check = input_check[atom_len as usize..].to_string();
+                let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                return (flag, atom_len as i32 + len);
             }
-            
-            return (false, 0);
+            else {
+                return (false, 0);
+            }
         }
 
         (false, 0)
-
     }
 }
 
