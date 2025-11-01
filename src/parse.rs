@@ -1,6 +1,8 @@
 use std::iter::Peekable;
 use std::str::Chars;
 
+
+#[derive(Debug)]
 enum Token {
     Literal(String),
     CharClass(String),
@@ -9,35 +11,48 @@ enum Token {
     Parentheses(String),
 }
 
-pub struct Parser<'a> {
-    pub chars: Peekable<Chars<'a>>
+pub struct Parser {
+    pub chars: Vec<char>
 }
 
-impl<'a> Parser<'a> {
+impl Parser {
 
-    pub fn new(pattern: &'a str) -> Self {
-        Self {chars: pattern.chars().peekable()}
+    pub fn new(pattern: &str) -> Self {
+        Self {chars: pattern.chars().collect()}
     }
 
     pub fn next(&mut self) -> Option<char>{
-        self.chars.next()
+        if self.chars.is_empty() {
+            return None;
+        }
+        Some(self.chars.remove(0))
     }
 
     pub fn peek(&mut self) -> Option<char> {
-        self.chars.peek().copied()
+        self.chars.first().copied()
     }
 
     pub fn parse_literal(&mut self) -> Option<String> {
         let mut literal = String::new();
 
-        let specials = ".^$+?|()[]\\";
+        let specials = ".^$|()[]\\";
+        let quantifiers = "+?";
 
         while let Some(c) = self.peek() {
             if specials.contains(c) {
                 break;
             }
-            literal.push(c);
-            self.next();
+            else if quantifiers.contains(c) {
+                if literal.len() > 1 {
+                    let put_back = literal.pop().unwrap();
+                    self.chars.insert(0, put_back);
+                }
+                break;
+            }
+            else {
+                literal.push(c);
+                self.next();
+            }
         }
 
         if literal.is_empty() {
@@ -180,7 +195,7 @@ impl<'a> Parser<'a> {
         flag
     }
 
-    fn match_token_atom(input: &str, token: Token, start_anchor: bool) -> (bool, i32) {
+    fn match_token_atom(input: &str, token: &Token, start_anchor: bool) -> (bool, i32) {
         match token {
             Token::CharClass(token) => {
                 let mut len_input_checked: usize = 0;
@@ -225,7 +240,7 @@ impl<'a> Parser<'a> {
             Token::Literal(token) => {
                 if input.len() < token.len() { return (false, 0); }
                 for index in 0..input.len() - token.len() + 1 {
-                    if input[index..].starts_with(&token) {
+                    if input[index..].starts_with(token) {
                         if start_anchor && index > 0 {
                             return (false, 0);
                         }
@@ -250,13 +265,14 @@ impl<'a> Parser<'a> {
     }
 
     fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool) -> (bool, i32) {
-        println!("-> input: {}, pattern: {:?}", input, &parser.chars.clone().collect::<String>());
+        println!("-> input: {}, pattern: {:?}", input, &parser.chars.clone().into_iter().collect::<String>());
 
         if let Some(_) = parser.parse_start_anchor() {
             start_anchor = true;
         }
 
         if let Some(_) = parser.parse_end_anchor() {
+            println!("in end anchor - input: {}", input);
             if input.is_empty() {
                 return (true, 0);
             }
@@ -265,20 +281,15 @@ impl<'a> Parser<'a> {
             }
         }
 
-        if input.is_empty() && !parser.peek().is_none() {
-            return (false, 0);
-        }
+        // if input.is_empty() && !parser.peek().is_none() {
+        //     return (false, 0);
+        // }
 
         if parser.peek().is_none() {
             return (true, 0);
         }
 
         let mut input_check = input.to_string();
-
-
-        // if let Some(token) = parser.parse_parentheses() {
-            
-        // }
 
         let mut token: Option<Token> = None;
 
@@ -298,17 +309,78 @@ impl<'a> Parser<'a> {
             token = Some(Token::Literal(literal));
         }
 
+        
+        let quantifier = parser.parse_quantifier();
+        println!("quantifier: {:?}, token: {:?}", quantifier, &token);
+
         if let Some(token) = token {
-            let (is_match, atom_len) =  Self::match_token_atom(&input_check, token, start_anchor);
+            let (is_match, mut atom_len) =  Self::match_token_atom(&input_check, &token, start_anchor);
+            println!("is_match: {}, atom_len: {}", is_match, atom_len);
             if is_match {
-                input_check = input_check[atom_len as usize..].to_string();
-                let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                return (flag, atom_len as i32 + len);
+                match quantifier {
+                    Some('+') => {
+                        loop {
+                            println!("in + - input_check: {}", input_check);
+                            input_check = input_check[atom_len as usize..].to_string();
+                            let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                            if flag {
+                                return (true, atom_len as i32 + len);
+                            }
+                            else {
+                                let (is_matched_inside, len_inside) = Self::match_token_atom(&input_check, &token, true);
+                                if is_matched_inside {
+                                    atom_len += len_inside;
+                                }
+                                else {
+                                    return (false, 0);
+                                }
+                            }
+                        }
+                    }
+                    // Some('?') => {
+                    //     // match zero
+                    //     let (mut flag, mut len) = Self::match_pattern_internal(&input_check, parser, false);
+                    //     if !flag {
+                    //         // match one
+                    //         input_check = input_check[atom_len as usize..].to_string();
+                    //         (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                            
+                    //     }
+                    //     return (flag, atom_len as i32 + len);
+                    // }
+                    Some('?') | None => {
+                        input_check = input_check[atom_len as usize..].to_string();
+                        let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                        return (flag, atom_len as i32 + len);
+                    }
+                    // None => {
+                    //     input_check = input_check[atom_len as usize..].to_string();
+                    //     let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                    //     return (flag, atom_len as i32 + len);
+                    // }
+                    _ => {panic!("Invalid quantifier")}
+                }
+                
             }
             else {
+                if quantifier.is_some() && quantifier.unwrap() == '?' {
+                    println!("in ? - input_check: {}", input_check);
+                    let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                    if flag {
+                        return (true, len);
+                    }
+                }
                 return (false, 0);
             }
+            
         }
+        else {
+            if quantifier.is_some() {
+                if quantifier.unwrap() == '?' {return (true, 0);}
+            return (false, 0);
+            }
+        }
+        
         (false, 0)
     }
 }

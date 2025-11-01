@@ -13,8 +13,8 @@ mod tests_internal_functions {
     fn test_parse_literal_basic() {
         let mut parser = Parser::new("hello+world");
         let literal = parser.parse_literal();
-        assert_eq!(literal, Some("hello".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "+world");
+        assert_eq!(literal, Some("hell".to_string()));
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "o+world");
     }
 
     #[test]
@@ -37,7 +37,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new(".abc");
         let dot = parser.parse_dot();
         assert_eq!(dot, Some(".".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "abc"); // dot consumed
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc"); // dot consumed
     }
     
     #[test]
@@ -45,7 +45,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("abc");
         let dot = parser.parse_dot();
         assert_eq!(dot, None);
-        assert_eq!(parser.chars.collect::<String>(), "abc"); // nothing consumed
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc"); // nothing consumed
     }
 
     // Tests for parse_slash
@@ -54,7 +54,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("\\dabc");
         let slash = parser.parse_slash();
         assert_eq!(slash, Some("\\d".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "abc"); // \d consumed
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc"); // \d consumed
     }
 
     #[test]
@@ -62,7 +62,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("abc");
         let slash = parser.parse_slash();
         assert_eq!(slash, None);
-        assert_eq!(parser.chars.collect::<String>(), "abc"); // nothing consumed
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc"); // nothing consumed
     }
 
     #[test]
@@ -85,7 +85,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("[abc]+");
         let cls = parser.parse_char_class();
         assert_eq!(cls, Some("[abc]".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "+");
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "+");
     }
 
     #[test]
@@ -93,7 +93,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("[^xyz]end");
         let cls = parser.parse_char_class();
         assert_eq!(cls, Some("[^xyz]".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "end");
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "end");
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("+next");
         let q = parser.parse_quantifier();
         assert_eq!(q, Some('+'));
-        assert_eq!(parser.chars.collect::<String>(), "next");
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "next");
     }
 
     #[test]
@@ -117,7 +117,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("?abc");
         let q = parser.parse_quantifier();
         assert_eq!(q, Some('?'));
-        assert_eq!(parser.chars.collect::<String>(), "abc");
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc");
     }
 
     #[test]
@@ -125,7 +125,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("abc");
         let q = parser.parse_quantifier();
         assert_eq!(q, None);
-        assert_eq!(parser.chars.collect::<String>(), "abc"); // unchanged
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc"); // unchanged
     }
 
     // Tests for parse_start_anchor
@@ -134,7 +134,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("^hello");
         let anchor = parser.parse_start_anchor();
         assert_eq!(anchor, Some("^".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "hello");
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "hello");
     }
 
     #[test]
@@ -142,7 +142,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("hello");
         let anchor = parser.parse_start_anchor();
         assert_eq!(anchor, None);
-        assert_eq!(parser.chars.collect::<String>(), "hello"); // unchanged
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "hello"); // unchanged
     }
 
     #[test]
@@ -150,7 +150,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("^");
         let anchor = parser.parse_start_anchor();
         assert_eq!(anchor, Some("^".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), ""); // consumed entire pattern
+        assert_eq!(parser.chars.into_iter().collect::<String>(), ""); // consumed entire pattern
     }
 
     #[test]
@@ -167,7 +167,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("$");
         let anchor = parser.parse_end_anchor();
         assert_eq!(anchor, Some("$".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), "");
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "");
     }
 
     #[test]
@@ -175,7 +175,7 @@ mod tests_internal_functions {
         let mut parser = Parser::new("world");
         let anchor = parser.parse_end_anchor();
         assert_eq!(anchor, None);
-        assert_eq!(parser.chars.collect::<String>(), "world"); // unchanged
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "world"); // unchanged
     }
 
     #[test]
@@ -187,7 +187,7 @@ mod tests_internal_functions {
         // Now parse the end anchor
         let anchor = parser.parse_end_anchor();
         assert_eq!(anchor, Some("$".to_string()));
-        assert_eq!(parser.chars.collect::<String>(), ""); // consumed
+        assert_eq!(parser.chars.into_iter().collect::<String>(), ""); // consumed
     }
 
     // Tests for parse_parentheses
@@ -405,20 +405,20 @@ mod tests_match_pattern {
     }
 
     // Quantifier tests
-    // #[test]
-    // fn test_question_mark_optional() {
-    //     assert!(Parser::match_pattern("cat", "cats?"));
-    // }
+    #[test]
+    fn test_question_mark_optional() {
+        assert!(Parser::match_pattern("cat", "cats?"));
+    }
 
-    // #[test]
-    // fn test_question_mark_present() {
-    //     assert!(Parser::match_pattern("cats", "cats?"));
-    // }
+    #[test]
+    fn test_question_mark_present() {
+        assert!(Parser::match_pattern("cats", "cats?"));
+    }
 
-    // #[test]
-    // fn test_question_mark_only() {
-    //     assert!(Parser::match_pattern("x", "?"));
-    // }
+    #[test]
+    fn test_question_mark_only() {
+        assert!(Parser::match_pattern("x", "?"));
+    }
 
     // Alternation tests
     #[test]
@@ -479,64 +479,60 @@ mod tests_match_pattern {
         assert!(Parser::match_pattern("", "^$"));
         assert!(!Parser::match_pattern("hello", "^$"));
     }
-
-    // ============================================================================
-    // Commented Out Tests (Future Features)
-    // ============================================================================
     
-    // #[test]
-    // fn test_plus_quantifier_match() {
-    //     assert!(Parser::match_pattern("aaa", "a+"));
-    // }
+    #[test]
+    fn test_plus_quantifier_match() {
+        assert!(Parser::match_pattern("aaa", "a+"));
+    }
 
-    // #[test]
-    // fn test_plus_quantifier_single() {
-    //     assert!(Parser::match_pattern("a", "a+"));
-    // }
+    #[test]
+    fn test_plus_quantifier_single() {
+        assert!(Parser::match_pattern("a", "a+"));
+    }
 
-    // #[test]
-    // fn test_plus_quantifier_no_match() {
-    //     assert!(!Parser::match_pattern("bbb", "a+"));
-    // }
+    #[test]
+    fn test_plus_quantifier_no_match() {
+        assert!(!Parser::match_pattern("bbb", "a+"));
+    }
 
-    // #[test]
-    // fn test_plus_quantifier_with_prefix() {
-    //     assert!(!Parser::match_pattern("act", "ca+t"));
-    // }
+    #[test]
+    fn test_plus_quantifier_with_prefix() {
+        assert!(!Parser::match_pattern("act", "ca+t"));
+    }
 
-    // #[test]
-    // fn test_dot_plus() {
-    //     assert!(Parser::match_pattern("hello", ".+"));
-    // }
+    #[test]
+    fn test_dot_plus() {
+        assert!(Parser::match_pattern("hello", ".+"));
+    }
 
-    // #[test]
-    // fn test_digit_with_plus() {
-    //     assert!(Parser::match_pattern("abc123def", "\\d+"));
-    // }
+    #[test]
+    fn test_digit_with_plus() {
+        assert!(Parser::match_pattern("abc123def", "\\d+"));
+    }
 
-    // #[test]
-    // fn test_char_class_with_plus() {
-    //     assert!(Parser::match_pattern("aaabbb", "[ab]+"));
-    // }
+    #[test]
+    fn test_char_class_with_plus() {
+        assert!(Parser::match_pattern("aaabbb", "[ab]+"));
+    }
 
-    // #[test]
-    // fn test_complex_anchor_alternation_pattern() {
-    //     assert!(!Parser::match_pattern("I see 2 dog3", "^I see \\d+ (cat|dog)s?$"));
-    // }
+    #[test]
+    fn test_complex_anchor_alternation_pattern() {
+        assert!(!Parser::match_pattern("I see 2 dog3", "^I see \\d+ (cat|dog)s?$"));
+    }
 
-    // #[test]
-    // fn test_complex_pattern_should_match() {
-    //     assert!(Parser::match_pattern("I see 1 cat", "^I see \\d+ (cat|dog)s?$"));
-    // }
+    #[test]
+    fn test_complex_pattern_should_match() {
+        assert!(Parser::match_pattern("I see 1 cat", "^I see \\d+ (cat|dog)s?$"));
+    }
 
-    // #[test]
-    // fn test_complex_pattern_with_plural() {
-    //     assert!(Parser::match_pattern("I see 42 dogs", "^I see \\d+ (cat|dog)s?$"));
-    // }
+    #[test]
+    fn test_complex_pattern_with_plural() {
+        assert!(Parser::match_pattern("I see 42 dogs", "^I see \\d+ (cat|dog)s?$"));
+    }
 
-    // #[test]
-    // fn test_phone_number() {
-    //     assert!(Parser::match_pattern("123-456-7890", "\\d+-\\d+-\\d+"));
-    // }
+    #[test]
+    fn test_phone_number() {
+        assert!(Parser::match_pattern("123-456-7890", "\\d+-\\d+-\\d+"));
+    }
 
 }
