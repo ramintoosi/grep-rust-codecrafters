@@ -6,6 +6,7 @@ enum Token {
     CharClass(String),
     Dot,
     Slash,
+    Parentheses(String),
 }
 
 pub struct Parser<'a> {
@@ -233,7 +234,19 @@ impl<'a> Parser<'a> {
                 }
                 return (false, 0);
             }
+            Token::Parentheses(token) => {
+                let alternates: Vec<String> = Self::split_alternatives(&token);
+                for alternate in alternates {
+                    let mut new_parser = Parser::new(&alternate);
+                    let (flag, len) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor);
+                    if flag {
+                        return (true, len);
+                    }
+                }
+                return (false, 0);
+            }
         }
+        
     }
 
     fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool) -> (bool, i32) {
@@ -263,25 +276,17 @@ impl<'a> Parser<'a> {
         let mut input_check = input.to_string();
 
 
-        if let Some(token) = parser.parse_parentheses() {
-            let alternates = Self::split_alternatives(&token);
-            for alternate in alternates {
-                let mut new_parser = Parser::new(&alternate);
-                let (flag, len) = Self::match_pattern_internal(&input_check, &mut new_parser, start_anchor);
-                if flag {
-                    input_check = input_check[len as usize..].to_string();
-                    println!("input_check: {}, pattern: {:?}", input_check, &parser.chars.clone().collect::<String>());
-                    let (flag, len_inside) = Self::match_pattern_internal(&input_check, parser, false);
-                    return (flag, len + len_inside);
-                }
-            }
-            return (false, 0);
-        }
+        // if let Some(token) = parser.parse_parentheses() {
+            
+        // }
 
         let mut token: Option<Token> = None;
 
         if let Some(pattern) = parser.parse_char_class() {
             token = Some(Token::CharClass(pattern));
+        }
+        else if let Some(pattern) = parser.parse_parentheses() {
+            token = Some(Token::Parentheses(pattern));
         }
         else if let Some(_) = parser.parse_slash() {
             token = Some(Token::Slash);
@@ -304,7 +309,6 @@ impl<'a> Parser<'a> {
                 return (false, 0);
             }
         }
-
         (false, 0)
     }
 }
