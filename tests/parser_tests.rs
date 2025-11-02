@@ -67,13 +67,6 @@ mod tests_internal_functions {
 
     #[test]
     #[should_panic(expected = "Invalid escape sequence")]
-    fn test_parse_slash_invalid_escape() {
-        let mut parser = Parser::new("\\x");
-        let _ = parser.parse_slash(); // should panic
-    }
-
-    #[test]
-    #[should_panic(expected = "Invalid escape sequence")]
     fn test_parse_slash_backslash_at_end() {
         let mut parser = Parser::new("\\");
         let _ = parser.parse_slash(); // should panic
@@ -378,6 +371,25 @@ mod tests_match_pattern {
         assert!(!Parser::match_pattern("abcdef", "\\d"));
     }
 
+    #[test]
+    fn test_digit_and_word_escapes() {
+        assert!(Parser::match_pattern("sally has 3 dogs", "\\d \\w\\w\\ws"));
+    }
+
+    #[test]
+    fn test_escaped_backslashes_in_pattern() {
+        // Test case: pattern '\d\\d\\d apples' (digit, then literal \d\d, then ' apples')
+        // Input: 'sally has 12 apples'
+        // This tests handling of escaped backslashes in patterns
+        // Note: In Rust string literals, we need to escape backslashes: "\\d\\\\d\\\\d apples"
+        // The pattern should parse correctly and match appropriately
+        // The pattern expects: a digit, then literal "\d\d", then " apples"
+        // Since "12 apples" doesn't contain literal "\d\d", this should not match
+        assert!(!Parser::match_pattern("sally has 12 apples", "\\d\\\\d\\\\d apples"));
+        assert!(Parser::match_pattern(r"sally has 1\2\3 apples", "\\d\\\\d\\\\d apples"));
+
+    }
+
     // Anchor tests
     #[test]
     fn test_start_anchor_match() {
@@ -408,6 +420,21 @@ mod tests_match_pattern {
     #[test]
     fn test_question_mark_optional() {
         assert!(Parser::match_pattern("cat", "cats?"));
+    }
+
+    #[test]
+    fn test_dot_plus_with_unicode() {
+        // Test case: pattern 'g.+gol' should match 'goøö0Ogol'
+        // This tests that dot-plus quantifier works with Unicode characters
+        assert!(Parser::match_pattern("goøö0Ogol", "g.+gol"));
+    }
+
+    #[test]
+    fn test_dot_plus_insufficient_chars() {
+        // Test case: pattern 'g.+gol' should NOT match 'gol'
+        // After matching 'g', '.+' requires at least one character before 'gol',
+        // but 'ol' doesn't contain 'gol', so it should fail
+        assert!(!Parser::match_pattern("gol", "g.+gol"));
     }
 
     #[test]

@@ -1,16 +1,13 @@
-use std::iter::Peekable;
-use std::str::Chars;
-
-
 #[derive(Debug)]
 enum Token {
     Literal(String),
     CharClass(String),
     Dot,
-    Slash,
+    Slash(String),
     Parentheses(String),
 }
 
+#[derive(Clone)]
 pub struct Parser {
     pub chars: Vec<char>
 }
@@ -79,13 +76,16 @@ impl Parser {
     pub fn parse_slash(&mut self) -> Option<String> {
         if let Some(c) = self.peek() {
             if c == '\\' {
+                let mut result = String::new();
+                result.push(c);
                 self.next();
                 if let Some(c) = self.peek() {
-                    if c == 'd' {
+                    if c != '\\' {
+                        result.push(c);
                         self.next();
-                        Some("\\d".to_string())
                     }
-                    else {panic!("Invalid escape sequence")}
+                    return Some(result);
+                    
                 }
                 else {panic!("Invalid escape sequence")}
             }
@@ -188,6 +188,17 @@ impl Parser {
         None
     }
 
+    fn slice_based_on_char(s: &str, start: usize) -> String {
+        let mut char_indices = s.char_indices();
+    
+        let byte_start = match char_indices.nth(start) {
+            Some((byte_idx, _)) => byte_idx,
+            None => s.len(), // start beyond end means return empty string
+        };
+    
+        s[byte_start..].to_string()
+    }
+
     pub fn match_pattern(input: &str, pattern: &str) -> bool {
         let mut parser = Parser::new(pattern);
         let (flag, _) = Self::match_pattern_internal(input, &mut parser, false);
@@ -202,7 +213,7 @@ impl Parser {
                 let mut flag = false;
                 for c in input.chars() {
                     len_input_checked += 1;
-                    if token.contains(c) && !token.starts_with("[^") {
+                    if token[1..token.len() - 1].contains(c) && !token.starts_with("[^") {
                         flag = true;
                         break
                     }
@@ -221,10 +232,17 @@ impl Parser {
                     return (flag, len_input_checked as i32);
                 }
             }
-            Token::Slash => {
+            Token::Slash(token) => {
                 if input.is_empty() { return (false, 0); }
+                let token_char = token.chars().nth(1).unwrap();
                 for (index, c) in input.chars().enumerate() {
-                    if c.is_digit(10) {
+                    if c.is_digit(10) && token_char == 'd' {
+                        if start_anchor && index > 0 {
+                            return (false, 0);
+                        }
+                        return (true, index as i32 + 1);
+                    }
+                    else if !c.is_digit(10) && token_char == 'w' {
                         if start_anchor && index > 0 {
                             return (false, 0);
                         }
@@ -240,7 +258,7 @@ impl Parser {
             Token::Literal(token) => {
                 if input.len() < token.len() { return (false, 0); }
                 for index in 0..input.len() - token.len() + 1 {
-                    if input[index..].starts_with(token) {
+                    if Self::slice_based_on_char(&input, index).starts_with(token) {
                         if start_anchor && index > 0 {
                             return (false, 0);
                         }
@@ -299,8 +317,13 @@ impl Parser {
         else if let Some(pattern) = parser.parse_parentheses() {
             token = Some(Token::Parentheses(pattern));
         }
-        else if let Some(_) = parser.parse_slash() {
-            token = Some(Token::Slash);
+        else if let Some(pattern) = parser.parse_slash() {
+            if pattern.len() > 1 {
+                token = Some(Token::Slash(pattern));
+            }
+            else {
+                token = Some(Token::Literal("\\".to_string()));
+            }
         }
         else if let Some(_) = parser.parse_dot() {
             token = Some(Token::Dot);
@@ -320,9 +343,9 @@ impl Parser {
                 match quantifier {
                     Some('+') => {
                         loop {
-                            println!("in + - input_check: {}", input_check);
-                            input_check = input_check[atom_len as usize..].to_string();
-                            let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                            input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
+                            let mut new_parser = parser.clone();
+                            let (flag, len) = Self::match_pattern_internal(&input_check, &mut new_parser, false);
                             if flag {
                                 return (true, atom_len as i32 + len);
                             }
@@ -337,34 +360,17 @@ impl Parser {
                             }
                         }
                     }
-                    // Some('?') => {
-                    //     // match zero
-                    //     let (mut flag, mut len) = Self::match_pattern_internal(&input_check, parser, false);
-                    //     if !flag {
-                    //         // match one
-                    //         input_check = input_check[atom_len as usize..].to_string();
-                    //         (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                            
-                    //     }
-                    //     return (flag, atom_len as i32 + len);
-                    // }
                     Some('?') | None => {
-                        input_check = input_check[atom_len as usize..].to_string();
+                        input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
                         let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
                         return (flag, atom_len as i32 + len);
                     }
-                    // None => {
-                    //     input_check = input_check[atom_len as usize..].to_string();
-                    //     let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                    //     return (flag, atom_len as i32 + len);
-                    // }
                     _ => {panic!("Invalid quantifier")}
                 }
                 
             }
             else {
                 if quantifier.is_some() && quantifier.unwrap() == '?' {
-                    println!("in ? - input_check: {}", input_check);
                     let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
                     if flag {
                         return (true, len);
