@@ -242,7 +242,7 @@ impl Parser {
                         }
                         return (true, index as i32 + 1);
                     }
-                    else if !c.is_digit(10) && token_char == 'w' {
+                    else if (c.is_alphanumeric() || c == '_') && token_char == 'w' {
                         if start_anchor && index > 0 {
                             return (false, 0);
                         }
