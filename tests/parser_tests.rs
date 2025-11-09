@@ -188,7 +188,7 @@ mod tests_internal_functions {
     fn test_parse_parentheses_basic() {
         let mut parser = Parser::new("(cat|dog)+");
         let group = parser.parse_parentheses();
-        assert_eq!(group, Some("(cat|dog)".to_string()));
+        assert_eq!(group, Some(("(cat|dog)".to_string(), false)));
         assert_eq!(parser.peek(), Some('+'));
     }
 
@@ -196,7 +196,7 @@ mod tests_internal_functions {
     fn test_parse_parentheses_nested() {
         let mut parser = Parser::new("(a|(b|c))end");
         let group = parser.parse_parentheses();
-        assert_eq!(group, Some("(a|(b|c))".to_string()));
+        assert_eq!(group, Some(("(a|(b|c))".to_string(), false)));
         assert_eq!(parser.peek(), Some('e'));
     }
 
@@ -296,6 +296,11 @@ mod tests_match_pattern {
     }
 
     #[test]
+    fn test_wildcard_car_no_match() {
+        assert!(!Parser::match_pattern("car", "c.t"));
+    }
+
+    #[test]
     fn test_wildcard_with_text() {
         assert!(Parser::match_pattern("abc123", "abc..."));
     }
@@ -331,6 +336,16 @@ mod tests_match_pattern {
     #[test]
     fn test_single_char_in_class() {
         assert!(Parser::match_pattern("a", "[a]"));
+    }
+
+    #[test]
+    fn test_char_class_nbc() {
+        assert!(Parser::match_pattern("nbc", "[mango]"));
+    }
+
+    #[test]
+    fn test_char_class_empty_brackets() {
+        assert!(!Parser::match_pattern("[]", "[orange]"));
     }
 
     // Negated character class tests
@@ -377,6 +392,51 @@ mod tests_match_pattern {
     }
 
     #[test]
+    fn test_digit_escape_one_orange() {
+        assert!(!Parser::match_pattern("sally has 1 orange", "\\d apple"));
+    }
+
+    #[test]
+    fn test_digit_escape_124_apples() {
+        assert!(Parser::match_pattern("sally has 124 apples", "\\d\\d\\d apples"));
+    }
+
+    #[test]
+    fn test_digit_and_word_escapes_four_dogs() {
+        assert!(Parser::match_pattern("sally has 4 dogs", "\\d \\w\\w\\ws"));
+    }
+
+    #[test]
+    fn test_digit_and_word_escapes_one_dog_no_match() {
+        assert!(!Parser::match_pattern("sally has 1 dog", "\\d \\w\\w\\ws"));
+    }
+
+    #[test]
+    fn test_word_escape_mango() {
+        assert!(Parser::match_pattern("MANGO", "\\w"));
+    }
+
+    #[test]
+    fn test_word_escape_598() {
+        assert!(Parser::match_pattern("598", "\\w"));
+    }
+
+    #[test]
+    fn test_digit_escape_abc_0_xyz() {
+        assert!(Parser::match_pattern("abc_0_xyz", "\\d"));
+    }
+
+    #[test]
+    fn test_word_escape_special_chars_with_underscore() {
+        assert!(Parser::match_pattern("%=#_=÷+", "\\w"));
+    }
+
+    #[test]
+    fn test_word_escape_special_chars_no_match() {
+        assert!(!Parser::match_pattern("%+=÷×#", "\\w"));
+    }
+
+    #[test]
     fn test_escaped_backslashes_in_pattern() {
         // Test case: pattern '\d\\d\\d apples' (digit, then literal \d\d, then ' apples')
         // Input: 'sally has 12 apples'
@@ -416,6 +476,26 @@ mod tests_match_pattern {
         assert!(Parser::match_pattern("anything", "^"));
     }
 
+    #[test]
+    fn test_end_anchor_blueberry_orange() {
+        assert!(Parser::match_pattern("blueberry_orange", "orange$"));
+    }
+
+    #[test]
+    fn test_end_anchor_orange_blueberry() {
+        assert!(!Parser::match_pattern("orange_blueberry", "orange$"));
+    }
+
+    #[test]
+    fn test_start_end_anchor_strawberry() {
+        assert!(Parser::match_pattern("strawberry", "^strawberry$"));
+    }
+
+    #[test]
+    fn test_start_end_anchor_strawberry_strawberry() {
+        assert!(!Parser::match_pattern("strawberry_strawberry", "^strawberry$"));
+    }
+
     // Quantifier tests
     #[test]
     fn test_question_mark_optional() {
@@ -445,6 +525,31 @@ mod tests_match_pattern {
     #[test]
     fn test_question_mark_only() {
         assert!(Parser::match_pattern("x", "?"));
+    }
+
+    #[test]
+    fn test_question_mark_cat() {
+        assert!(Parser::match_pattern("cat", "ca?t"));
+    }
+
+    #[test]
+    fn test_question_mark_act() {
+        assert!(Parser::match_pattern("act", "ca?t"));
+    }
+
+    #[test]
+    fn test_question_mark_cat_double() {
+        assert!(Parser::match_pattern("cat", "ca?a?t"));
+    }
+
+    #[test]
+    fn test_question_mark_dog_no_match() {
+        assert!(!Parser::match_pattern("dog", "ca?t"));
+    }
+
+    #[test]
+    fn test_question_mark_cag_no_match() {
+        assert!(!Parser::match_pattern("cag", "ca?t"));
     }
 
     // Alternation tests
@@ -528,6 +633,31 @@ mod tests_match_pattern {
     }
 
     #[test]
+    fn test_plus_quantifier_cat() {
+        assert!(Parser::match_pattern("cat", "ca+t"));
+    }
+
+    #[test]
+    fn test_plus_quantifier_caaats() {
+        assert!(Parser::match_pattern("caaats", "ca+at"));
+    }
+
+    #[test]
+    fn test_plus_quantifier_ca_no_match() {
+        assert!(!Parser::match_pattern("ca", "ca+t"));
+    }
+
+    #[test]
+    fn test_plus_quantifier_abc_123_xyz() {
+        assert!(Parser::match_pattern("abc_123_xyz", "^abc_\\d+_xyz$"));
+    }
+
+    #[test]
+    fn test_plus_quantifier_abc_rst_xyz() {
+        assert!(!Parser::match_pattern("abc_rst_xyz", "^abc_\\d+_xyz$"));
+    }
+
+    #[test]
     fn test_dot_plus() {
         assert!(Parser::match_pattern("hello", ".+"));
     }
@@ -558,8 +688,72 @@ mod tests_match_pattern {
     }
 
     #[test]
+    fn test_alternation_a_cat() {
+        assert!(Parser::match_pattern("a cat", "a (cat|dog)"));
+    }
+
+    #[test]
+    fn test_alternation_a_cog() {
+        assert!(!Parser::match_pattern("a cog", "a (cat|dog)"));
+    }
+
+    #[test]
+    fn test_complex_pattern_i_see_a_cat() {
+        assert!(!Parser::match_pattern("I see a cat", "^I see \\d+ (cat|dog)s?$"));
+    }
+
+    #[test]
     fn test_phone_number() {
         assert!(Parser::match_pattern("123-456-7890", "\\d+-\\d+-\\d+"));
+    }
+
+    // Backreference tests
+    #[test]
+    fn test_backreference_cat_and_cat() {
+        // (cat) and \1 matches "cat and cat" (both are "cat")
+        assert!(Parser::match_pattern("cat and cat", "(cat) and \\1"));
+    }
+
+    #[test]
+    fn test_backreference_cat_and_dog() {
+        // (cat) and \1 does not match "cat and dog" ("cat" ≠ "dog")
+        assert!(!Parser::match_pattern("cat and dog", "(cat) and \\1"));
+    }
+
+    #[test]
+    fn test_backreference_word_cat_and_cat() {
+        // (\w+) and \1 matches "cat and cat"
+        assert!(Parser::match_pattern("cat and cat", "(\\w+) and \\1"));
+    }
+
+    #[test]
+    fn test_backreference_word_dog_and_dog() {
+        // (\w+) and \1 matches "dog and dog"
+        assert!(Parser::match_pattern("dog and dog", "(\\w+) and \\1"));
+    }
+
+    #[test]
+    fn test_backreference_word_cat_and_dog() {
+        // (\w+) and \1 does not match "cat and dog"
+        assert!(!Parser::match_pattern("cat and dog", "(\\w+) and \\1"));
+    }
+
+    #[test]
+    fn test_backreference_digits_same_number() {
+        // (\d+)-\1 matches "123-123" (same number repeated)
+        assert!(Parser::match_pattern("123-123", "(\\d+)-\\1"));
+    }
+
+    #[test]
+    fn test_backreference_digits_different_number() {
+        // (\d+)-\1 does not match "123-456" (different numbers)
+        assert!(!Parser::match_pattern("123-456", "(\\d+)-\\1"));
+    }
+
+    #[test]
+    fn test_backreference_char_class_with_negated() {
+        // ^([act]+) is \1, not [^xyz]+$ matches "cat is c@t, not d0g"
+        assert!(!Parser::match_pattern("cat is c@t, not d0g", "^([act]+) is \\1, not [^xyz]+$"));
     }
 
 }

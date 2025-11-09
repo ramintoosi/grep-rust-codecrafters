@@ -1,21 +1,24 @@
-#[derive(Debug)]
+use std::collections::HashMap;
+
+#[derive(Debug, PartialEq)]
 enum Token {
     Literal(String),
     CharClass(String),
     Dot,
     Slash(String),
-    Parentheses(String),
+    Parentheses((String, bool)),
 }
 
 #[derive(Clone)]
 pub struct Parser {
-    pub chars: Vec<char>
+    pub chars: Vec<char>,
+    group_references: HashMap<String, String>
 }
 
 impl Parser {
 
     pub fn new(pattern: &str) -> Self {
-        Self {chars: pattern.chars().collect()}
+        Self {chars: pattern.chars().collect(), group_references: HashMap::new()}
     }
 
     pub fn next(&mut self) -> Option<char>{
@@ -121,7 +124,8 @@ impl Parser {
         None
     }
 
-    pub fn parse_parentheses(&mut self) -> Option<String> {
+    pub fn parse_parentheses(&mut self) -> Option<(String, bool)> {
+        let mut is_group = true;
         if let Some(c) = self.peek() {
             let mut depth = 0;
             if c == '(' {
@@ -131,7 +135,12 @@ impl Parser {
                     if c == ')' {
                         depth -= 1;
                         if depth == 0 {
-                            return Some(result);
+                            return Some((result, is_group));
+                        }
+                    }
+                    else if c == '|' {
+                        if depth == 1 {
+                            is_group = false;
                         }
                     }
                     else if c == '(' {
@@ -201,12 +210,14 @@ impl Parser {
 
     pub fn match_pattern(input: &str, pattern: &str) -> bool {
         let mut parser = Parser::new(pattern);
-        let (flag, _) = Self::match_pattern_internal(input, &mut parser, false);
+        let (flag, _, _) = Self::match_pattern_internal(input, &mut parser, false, None, true);
         println!("-------> match pattern done flag: {}", flag);
         flag
     }
 
-    fn match_token_atom(input: &str, token: &Token, start_anchor: bool) -> (bool, i32) {
+    fn match_token_atom(input: &str, token: &Token, start_anchor: bool, group_references: &HashMap<String, String>, is_special: bool) -> (bool, i32, String) {
+        println!("[ATOM] -> input: {}, token: {:?}, start_anchor: {}, group_references: {:?}, is_special: {}", input, token, start_anchor, group_references, is_special);
+        let mut matched: String = String::new();
         match token {
             Token::CharClass(token) => {
                 let mut len_input_checked: usize = 0;
@@ -214,108 +225,100 @@ impl Parser {
                 for c in input.chars() {
                     len_input_checked += 1;
                     if token[1..token.len() - 1].contains(c) && !token.starts_with("[^") {
+                        matched.push(c);
                         flag = true;
                         break
                     }
                     else if token.starts_with("[^") && !token.contains(c) {
+                        matched.push(c);
                         flag = true;
                         break
                     }
                 }
                 if !flag {
-                    return (false, 0);
+                    return (false, 0, matched);
                 }
                 else if start_anchor && len_input_checked > 1 {
-                    return (false, 0);
+                    return (false, 0, matched);
                 }
                 else {
-                    return (flag, len_input_checked as i32);
+                    return (flag, len_input_checked as i32, matched);
                 }
             }
             Token::Slash(token) => {
-                if input.is_empty() { return (false, 0); }
+                if input.is_empty() { return (false, 0, matched); }
                 let token_char = token.chars().nth(1).unwrap();
                 for (index, c) in input.chars().enumerate() {
                     if c.is_digit(10) && token_char == 'd' {
                         if start_anchor && index > 0 {
-                            return (false, 0);
+                            return (false, 0, matched);
                         }
-                        return (true, index as i32 + 1);
+                        matched.push(c);
+                        return (true, index as i32 + 1, matched);
                     }
                     else if (c.is_alphanumeric() || c == '_') && token_char == 'w' {
                         if start_anchor && index > 0 {
-                            return (false, 0);
+                            return (false, 0, matched);
                         }
-                        return (true, index as i32 + 1);
+                        matched.push(c);
+                        return (true, index as i32 + 1, matched);
+                    }
+                    if token_char.is_digit(10) {
+                        return Self::match_token_atom(input, &Token::Literal(group_references.get(&token.to_string()).unwrap().to_string()), start_anchor, group_references, true);
                     }
                 }
-                return (false, 0);
+                return (false, 0, matched);
             }
             Token::Dot => {
-                if input.is_empty() { return (false, 0); }
-                return (true, 1);
+                if input.is_empty() { return (false, 0, matched); }
+                matched.push(input.chars().nth(0).unwrap());
+                return (true, 1, matched);
             }
             Token::Literal(token) => {
-                if input.len() < token.len() { return (false, 0); }
+                if input.len() < token.len() { return (false, 0, matched); }
+
+                if !is_special {
+                    if input.starts_with(token) {
+                        return (true, token.len() as i32, token.to_string());
+                    }
+                    else {
+                        return (false, 0, matched);
+                    }
+                }
+                
                 for index in 0..input.len() - token.len() + 1 {
                     if Self::slice_based_on_char(&input, index).starts_with(token) {
                         if start_anchor && index > 0 {
-                            return (false, 0);
+                            return (false, 0, matched);
                         }
-                        return (true, index as i32 + token.len() as i32);
+                        matched = token.to_string();
+                        return (true, index as i32 + token.len() as i32, matched);
                     }
                 }
-                return (false, 0);
+                return (false, 0, matched);
             }
-            Token::Parentheses(token) => {
+            Token::Parentheses((token, _)) => {
                 let alternates: Vec<String> = Self::split_alternatives(&token);
                 for alternate in alternates {
                     let mut new_parser = Parser::new(&alternate);
-                    let (flag, len) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor);
+                    let (flag, len, matched) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor, Some(true), false);
                     if flag {
-                        return (true, len);
+                        return (true, len, matched);
                     }
                 }
-                return (false, 0);
+                return (false, 0, matched);
             }
         }
         
     }
 
-    fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool) -> (bool, i32) {
-        println!("-> input: {}, pattern: {:?}", input, &parser.chars.clone().into_iter().collect::<String>());
-
-        if let Some(_) = parser.parse_start_anchor() {
-            start_anchor = true;
-        }
-
-        if let Some(_) = parser.parse_end_anchor() {
-            println!("in end anchor - input: {}", input);
-            if input.is_empty() {
-                return (true, 0);
-            }
-            else {
-                return (false, 0);
-            }
-        }
-
-        // if input.is_empty() && !parser.peek().is_none() {
-        //     return (false, 0);
-        // }
-
-        if parser.peek().is_none() {
-            return (true, 0);
-        }
-
-        let mut input_check = input.to_string();
-
+    fn get_next_token(parser: &mut Parser) -> Option<Token> {
         let mut token: Option<Token> = None;
-
         if let Some(pattern) = parser.parse_char_class() {
             token = Some(Token::CharClass(pattern));
         }
-        else if let Some(pattern) = parser.parse_parentheses() {
-            token = Some(Token::Parentheses(pattern));
+        else if let Some((pattern, _is_group)) = parser.parse_parentheses() {
+            token = Some(Token::Parentheses((pattern, _is_group)));
         }
         else if let Some(pattern) = parser.parse_slash() {
             if pattern.len() > 1 {
@@ -331,39 +334,120 @@ impl Parser {
         else if let Some(literal) = parser.parse_literal() {
             token = Some(Token::Literal(literal));
         }
+        token
+    }
 
+    fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool, is_special_entry: Option<bool>, start: bool) -> (bool, i32, String) {
+        println!("-> input: \"{}\", pattern: {:?}", input, &parser.chars.clone().into_iter().collect::<String>());
+
+        let matched: String = String::new();
+
+        if let Some(_) = parser.parse_start_anchor() {
+            start_anchor = true;
+        }
+
+        if let Some(_) = parser.parse_end_anchor() {
+            if input.is_empty() {
+                return (true, 0, matched);
+            }
+            else {
+                return (false, 0, matched);
+            }
+        }
+
+        if parser.peek().is_none() {
+            return (true, 0, matched);
+        }
+
+        let mut input_check = input.to_string();
+        let mut is_special = true;
+        let mut is_group = false;
+
+        let mut token = Self::get_next_token(parser);
+        if matches!(token, Some(Token::Literal(_))) {
+            if is_special_entry.is_some() {
+                is_special = is_special_entry.unwrap();
+            }
+            else {
+                is_special = false;
+            }
+            if parser.peek() == Some('$') {
+                is_special = true;
+            }
+            if start {
+                is_special = true;
+            }
+        }
+        if let Some(Token::Parentheses((pattern, group_flag))) = &token {
+            is_group = *group_flag;
+            if is_group {
+                let new_pattern = pattern.replace("(", "").replace(")", "");
+                let mut new_parser = Parser::new(&new_pattern);
+                // check if all literal
+                let literal = new_parser.parse_literal();
+                if new_parser.peek().is_some() {
+                    let new_chars: Vec<char> = new_pattern.chars().collect();
+                    parser.chars.splice(0..0, new_chars);
+                    
+                    token = Self::get_next_token(parser);
+                }
+                else {
+                    token = Some(Token::Literal(literal.unwrap()));
+                }
+                
+            }
+        }
         
         let quantifier = parser.parse_quantifier();
-        println!("quantifier: {:?}, token: {:?}", quantifier, &token);
 
         if let Some(token) = token {
-            let (is_match, mut atom_len) =  Self::match_token_atom(&input_check, &token, start_anchor);
-            println!("is_match: {}, atom_len: {}", is_match, atom_len);
+            let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special);
+            println!("-> is_match: {}, atom_len: {}, matched: {}, token: {:?}, quantifier: {:?}", is_match, atom_len, matched, token, quantifier);
+            if is_match && is_group {
+                let len_group_references = parser.group_references.len();
+                parser.group_references.insert(format!("\\{}", len_group_references + 1), matched.to_string());
+            }
             if is_match {
                 match quantifier {
                     Some('+') => {
                         loop {
+                            println!("[1+] -> atom_len: {}, input_check: \"{}\"", atom_len, input_check);
                             input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
                             let mut new_parser = parser.clone();
-                            let (flag, len) = Self::match_pattern_internal(&input_check, &mut new_parser, false);
+                            println!("[2+] -> input_check: \"{}\", new_parser: {:?}", input_check, new_parser.chars.clone().into_iter().collect::<String>());
+                            let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, &mut new_parser, true, None, false);
+                            println!("[3+] -> flag: {}, len: {}, matched_inside: {}", flag, len, matched_inside);
                             if flag {
-                                return (true, atom_len as i32 + len);
+                                matched.push_str(&matched_inside);
+                                if is_group {
+                                    let len_group_references = parser.group_references.len();
+                                    parser.group_references.insert(format!("\\{}", len_group_references), matched.to_string());
+                                }
+                                return (true, len, matched);
                             }
                             else {
-                                let (is_matched_inside, len_inside) = Self::match_token_atom(&input_check, &token, true);
+                                println!("[4+] -> input_check: \"{}\", token: {:?}", input_check, token);
+                                let (is_matched_inside, len_inside, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special);
+                                println!("[5+] -> is_matched_inside: {}, len_inside: {}, matched_inside: {}", is_matched_inside, len_inside, matched_inside);
                                 if is_matched_inside {
-                                    atom_len += len_inside;
+                                    matched.push_str(&matched_inside);
+                                    if is_group {
+                                        let len_group_references = parser.group_references.len();
+                                        parser.group_references.insert(format!("\\{}", len_group_references), matched.to_string());
+                                    }
+                                    atom_len = len_inside;
                                 }
                                 else {
-                                    return (false, 0);
+                                    return (false, 0, matched);
                                 }
                             }
                         }
                     }
                     Some('?') | None => {
                         input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
-                        let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
-                        return (flag, atom_len as i32 + len);
+                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, None, false);
+                        matched.push_str(&matched_inside);
+                        return (flag, atom_len as i32 + len, matched);
                     }
                     _ => {panic!("Invalid quantifier")}
                 }
@@ -371,23 +455,24 @@ impl Parser {
             }
             else {
                 if quantifier.is_some() && quantifier.unwrap() == '?' {
-                    let (flag, len) = Self::match_pattern_internal(&input_check, parser, false);
+                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, Some(is_special), false);
+                    matched.push_str(&matched_inside);
                     if flag {
-                        return (true, len);
+                        return (true, len, matched);
                     }
                 }
-                return (false, 0);
+                return (false, 0, matched);
             }
             
         }
         else {
             if quantifier.is_some() {
-                if quantifier.unwrap() == '?' {return (true, 0);}
-            return (false, 0);
+                if quantifier.unwrap() == '?' {return (true, 0, matched);}
+            return (false, 0, matched);
             }
         }
         
-        (false, 0)
+        (false, 0, matched)
     }
 }
 
