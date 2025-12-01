@@ -756,4 +756,28 @@ mod tests_match_pattern {
         assert!(!Parser::match_pattern("cat is c@t, not d0g", "^([act]+) is \\1, not [^xyz]+$"));
     }
 
+    #[test]
+    fn test_backreference_multiple_groups() {
+        // (\d+) (\w+) squares and \1 \2 circles matches "3 red squares and 3 red circles"
+        // Group 1: "3", Group 2: "red"
+        // \1 matches "3", \2 matches "red"
+        assert!(Parser::match_pattern("3 red squares and 3 red circles", "(\\d+) (\\w+) squares and \\1 \\2 circles"));
+    }
+
+    #[test]
+    fn test_backreference_word_digit_pattern() {
+        // (\w\w\w\w) (\d\d\d) is doing \1 \2 times matches "grep 101 is doing grep 101 times"
+        // Group 1: "grep" (4 word chars), Group 2: "101" (3 digits)
+        // \1 matches "grep", \2 matches "101"
+        assert!(Parser::match_pattern("grep 101 is doing grep 101 times", "(\\w\\w\\w\\w) (\\d\\d\\d) is doing \\1 \\2 times"));
+    }
+
+    #[test]
+    fn test_backreference_alternation_with_two_groups() {
+        // (c.t|d.g) and (f..h|b..d), \1 with \2 matches "cat and fish, cat with fish"
+        // Group 1: "cat" (matches c.t), Group 2: "fish" (matches f..h)
+        // \1 matches "cat", \2 matches "fish"
+        assert!(Parser::match_pattern("cat and fish, cat with fish", "(c.t|d.g) and (f..h|b..d), \\1 with \\2"));
+    }
+
 }

@@ -210,12 +210,12 @@ impl Parser {
 
     pub fn match_pattern(input: &str, pattern: &str) -> bool {
         let mut parser = Parser::new(pattern);
-        let (flag, _, _) = Self::match_pattern_internal(input, &mut parser, false, None, true);
+        let (flag, _, _) = Self::match_pattern_internal(input, &mut parser, false, None, true, false);
         println!("-------> match pattern done flag: {}", flag);
         flag
     }
 
-    fn match_token_atom(input: &str, token: &Token, start_anchor: bool, group_references: &HashMap<String, String>, is_special: bool) -> (bool, i32, String) {
+    fn match_token_atom(input: &str, token: &Token, start_anchor: bool, group_references: &HashMap<String, String>, is_special: bool, is_group: bool) -> (bool, i32, String) {
         println!("[ATOM] -> input: {}, token: {:?}, start_anchor: {}, group_references: {:?}, is_special: {}", input, token, start_anchor, group_references, is_special);
         let mut matched: String = String::new();
         match token {
@@ -264,7 +264,7 @@ impl Parser {
                         return (true, index as i32 + 1, matched);
                     }
                     if token_char.is_digit(10) {
-                        return Self::match_token_atom(input, &Token::Literal(group_references.get(&token.to_string()).unwrap().to_string()), start_anchor, group_references, true);
+                        return Self::match_token_atom(input, &Token::Literal(group_references.get(&token.to_string()).unwrap().to_string()), start_anchor, group_references, true, is_group);
                     }
                 }
                 return (false, 0, matched);
@@ -301,7 +301,7 @@ impl Parser {
                 let alternates: Vec<String> = Self::split_alternatives(&token);
                 for alternate in alternates {
                     let mut new_parser = Parser::new(&alternate);
-                    let (flag, len, matched) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor, Some(true), false);
+                    let (flag, len, matched) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor, Some(true), false, is_group);
                     if flag {
                         return (true, len, matched);
                     }
@@ -337,10 +337,29 @@ impl Parser {
         token
     }
 
-    fn match_pattern_internal(input: &str, parser: &mut Parser, mut start_anchor: bool, is_special_entry: Option<bool>, start: bool) -> (bool, i32, String) {
-        println!("-> input: \"{}\", pattern: {:?}", input, &parser.chars.clone().into_iter().collect::<String>());
+    fn match_pattern_internal(input: &str, 
+        parser: &mut Parser, 
+        mut start_anchor: bool, 
+        is_special_entry: Option<bool>, 
+        start: bool,
+        mut is_group: bool
+    ) -> (bool, i32, String) {
+        println!("-> input: \"{}\", pattern: {:?} is_group: {}", input, &parser.chars.clone().into_iter().collect::<String>(), is_group);
 
         let matched: String = String::new();
+        let mut input_check = input.to_string();
+        let mut is_special = true;
+        let mut new_group = true;
+        
+        if is_group{
+            new_group = false;
+            // check if the next char is )
+            if parser.peek() == Some(')') {
+                is_group = false;
+                parser.next();
+            }
+        }
+
 
         if let Some(_) = parser.parse_start_anchor() {
             start_anchor = true;
@@ -359,9 +378,6 @@ impl Parser {
             return (true, 0, matched);
         }
 
-        let mut input_check = input.to_string();
-        let mut is_special = true;
-        let mut is_group = false;
 
         let mut token = Self::get_next_token(parser);
         if matches!(token, Some(Token::Literal(_))) {
@@ -378,34 +394,39 @@ impl Parser {
                 is_special = true;
             }
         }
+
         if let Some(Token::Parentheses((pattern, group_flag))) = &token {
-            is_group = *group_flag;
-            if is_group {
-                let new_pattern = pattern.replace("(", "").replace(")", "");
-                let mut new_parser = Parser::new(&new_pattern);
-                // check if all literal
-                let literal = new_parser.parse_literal();
-                if new_parser.peek().is_some() {
-                    let new_chars: Vec<char> = new_pattern.chars().collect();
-                    parser.chars.splice(0..0, new_chars);
-                    
-                    token = Self::get_next_token(parser);
-                }
-                else {
-                    token = Some(Token::Literal(literal.unwrap()));
-                }
-                
+            if *group_flag {
+                let new_pattern = pattern.replace("(", "");
+                let new_parser = Parser::new(&new_pattern);
+                // add new parser chars to the start of the parser and ) will be the sign for the end of the group
+                parser.chars.splice(0..0, new_parser.chars.clone());
+                token = Self::get_next_token(parser);
             }
+            else {
+                // just add ) to the start of the parser so we can know when group is ended
+                parser.chars.insert(0, ')');
+            }
+            is_group = true;
         }
+
+        println!("-> TOKEN: {:?}", token);
         
         let quantifier = parser.parse_quantifier();
 
         if let Some(token) = token {
-            let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special);
+            let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special, is_group);
             println!("-> is_match: {}, atom_len: {}, matched: {}, token: {:?}, quantifier: {:?}", is_match, atom_len, matched, token, quantifier);
             if is_match && is_group {
-                let len_group_references = parser.group_references.len();
-                parser.group_references.insert(format!("\\{}", len_group_references + 1), matched.to_string());
+                let mut len_group_references = parser.group_references.len();
+                let mut add_to_group = matched.to_string();
+                if new_group || parser.group_references.get(&format!("\\{}", len_group_references)).is_none() {
+                    len_group_references += 1;
+                }
+                else {
+                    add_to_group = parser.group_references.get(&format!("\\{}", len_group_references)).unwrap().to_string() + &add_to_group;
+                }
+                parser.group_references.insert(format!("\\{}", len_group_references), add_to_group);
             }
             if is_match {
                 match quantifier {
@@ -415,7 +436,7 @@ impl Parser {
                             input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
                             let mut new_parser = parser.clone();
                             println!("[2+] -> input_check: \"{}\", new_parser: {:?}", input_check, new_parser.chars.clone().into_iter().collect::<String>());
-                            let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, &mut new_parser, true, None, false);
+                            let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, &mut new_parser, true, None, false, is_group);
                             println!("[3+] -> flag: {}, len: {}, matched_inside: {}", flag, len, matched_inside);
                             if flag {
                                 matched.push_str(&matched_inside);
@@ -427,7 +448,7 @@ impl Parser {
                             }
                             else {
                                 println!("[4+] -> input_check: \"{}\", token: {:?}", input_check, token);
-                                let (is_matched_inside, len_inside, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special);
+                                let (is_matched_inside, len_inside, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special, is_group);
                                 println!("[5+] -> is_matched_inside: {}, len_inside: {}, matched_inside: {}", is_matched_inside, len_inside, matched_inside);
                                 if is_matched_inside {
                                     matched.push_str(&matched_inside);
@@ -445,7 +466,7 @@ impl Parser {
                     }
                     Some('?') | None => {
                         input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
-                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, None, false);
+                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, None, false, is_group);
                         matched.push_str(&matched_inside);
                         return (flag, atom_len as i32 + len, matched);
                     }
@@ -455,7 +476,7 @@ impl Parser {
             }
             else {
                 if quantifier.is_some() && quantifier.unwrap() == '?' {
-                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, Some(is_special), false);
+                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, Some(is_special), false, is_group);
                     matched.push_str(&matched_inside);
                     if flag {
                         return (true, len, matched);
