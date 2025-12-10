@@ -780,4 +780,14 @@ mod tests_match_pattern {
         assert!(Parser::match_pattern("cat and fish, cat with fish", "(c.t|d.g) and (f..h|b..d), \\1 with \\2"));
     }
 
+    #[test]
+    fn test_backreference_nested_groups() {
+        // ("(cat) and \2") is the same as \1 matches ""cat and cat" is the same as "cat and cat""
+        // Outer group 1: ("(cat) and \2") captures "cat and cat"
+        // Inner group 2: (cat) captures "cat"
+        // \2 matches the inner group "cat"
+        // \1 matches the outer group "cat and cat"
+        assert!(Parser::match_pattern("\"cat and cat\" is the same as \"cat and cat\"", "(\"(cat) and \\2\") is the same as \\1"));
+    }
+
 }

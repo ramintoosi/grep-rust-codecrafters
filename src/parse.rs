@@ -12,13 +12,15 @@ enum Token {
 #[derive(Clone)]
 pub struct Parser {
     pub chars: Vec<char>,
-    group_references: HashMap<String, String>
+    group_references: HashMap<String, String>,
+    group_level: i32,
+    max_group_level: i32
 }
 
 impl Parser {
 
     pub fn new(pattern: &str) -> Self {
-        Self {chars: pattern.chars().collect(), group_references: HashMap::new()}
+        Self {chars: pattern.chars().collect(), group_references: HashMap::new(), group_level: 0, max_group_level: 0}
     }
 
     pub fn next(&mut self) -> Option<char>{
@@ -210,13 +212,13 @@ impl Parser {
 
     pub fn match_pattern(input: &str, pattern: &str) -> bool {
         let mut parser = Parser::new(pattern);
-        let (flag, _, _) = Self::match_pattern_internal(input, &mut parser, false, None, true, false);
+        let (flag, _, _) = Self::match_pattern_internal(input, &mut parser, false, None, true);
         println!("-------> match pattern done flag: {}", flag);
         flag
     }
 
-    fn match_token_atom(input: &str, token: &Token, start_anchor: bool, group_references: &HashMap<String, String>, is_special: bool, is_group: bool) -> (bool, i32, String) {
-        println!("[ATOM] -> input: {}, token: {:?}, start_anchor: {}, group_references: {:?}, is_special: {}", input, token, start_anchor, group_references, is_special);
+    fn match_token_atom(input: &str, token: &Token, start_anchor: bool, group_references: &HashMap<String, String>, is_special: bool) -> (bool, i32, String) {
+        // println!("[ATOM] -> input: {}, token: {:?}, start_anchor: {}, group_references: {:?}, is_special: {}", input, token, start_anchor, group_references, is_special);
         let mut matched: String = String::new();
         match token {
             Token::CharClass(token) => {
@@ -264,7 +266,7 @@ impl Parser {
                         return (true, index as i32 + 1, matched);
                     }
                     if token_char.is_digit(10) {
-                        return Self::match_token_atom(input, &Token::Literal(group_references.get(&token.to_string()).unwrap().to_string()), start_anchor, group_references, true, is_group);
+                        return Self::match_token_atom(input, &Token::Literal(group_references.get(&token.to_string()).unwrap().to_string()), start_anchor, group_references, true);
                     }
                 }
                 return (false, 0, matched);
@@ -301,7 +303,8 @@ impl Parser {
                 let alternates: Vec<String> = Self::split_alternatives(&token);
                 for alternate in alternates {
                     let mut new_parser = Parser::new(&alternate);
-                    let (flag, len, matched) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor, Some(true), false, is_group);
+                    new_parser.group_references = group_references.clone();
+                    let (flag, len, matched) = Self::match_pattern_internal(&input, &mut new_parser, start_anchor, Some(true), false);
                     if flag {
                         return (true, len, matched);
                     }
@@ -342,21 +345,18 @@ impl Parser {
         mut start_anchor: bool, 
         is_special_entry: Option<bool>, 
         start: bool,
-        mut is_group: bool
     ) -> (bool, i32, String) {
-        println!("-> input: \"{}\", pattern: {:?} is_group: {}", input, &parser.chars.clone().into_iter().collect::<String>(), is_group);
+        println!("[START] -> input: \"{}\", pattern: {:?} group_references: {:?}", input, &parser.chars.clone().into_iter().collect::<String>(), parser.group_references);
 
         let matched: String = String::new();
         let mut input_check = input.to_string();
         let mut is_special = true;
-        let mut new_group = true;
         
-        if is_group{
-            new_group = false;
-            // check if the next char is )
-            if parser.peek() == Some(')') {
-                is_group = false;
-                parser.next();
+        if parser.peek() == Some(')') {
+            parser.next();
+            parser.group_level -= 1;
+            if parser.group_level == 0 {
+                parser.max_group_level = 0;
             }
         }
 
@@ -397,36 +397,36 @@ impl Parser {
 
         if let Some(Token::Parentheses((pattern, group_flag))) = &token {
             if *group_flag {
-                let new_pattern = pattern.replace("(", "");
-                let new_parser = Parser::new(&new_pattern);
                 // add new parser chars to the start of the parser and ) will be the sign for the end of the group
-                parser.chars.splice(0..0, new_parser.chars.clone());
+                let pattern_to_add = pattern.chars().skip(1).collect::<String>();
+                parser.chars.splice(0..0, pattern_to_add.chars());
                 token = Self::get_next_token(parser);
             }
             else {
                 // just add ) to the start of the parser so we can know when group is ended
                 parser.chars.insert(0, ')');
             }
-            is_group = true;
+            parser.group_level += 1;
+            parser.max_group_level += 1;
+            parser.group_references.insert(format!("\\{}", parser.group_references.len() + 1), "".to_string());
         }
 
-        println!("-> TOKEN: {:?}", token);
+        println!("-> TOKEN: {:?} group_level: {}/{}, pattern: {}", token, parser.group_level, parser.max_group_level, parser.chars.clone().into_iter().collect::<String>());
         
         let quantifier = parser.parse_quantifier();
 
         if let Some(token) = token {
-            let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special, is_group);
+            let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special);
             println!("-> is_match: {}, atom_len: {}, matched: {}, token: {:?}, quantifier: {:?}", is_match, atom_len, matched, token, quantifier);
-            if is_match && is_group {
-                let mut len_group_references = parser.group_references.len();
-                let mut add_to_group = matched.to_string();
-                if new_group || parser.group_references.get(&format!("\\{}", len_group_references)).is_none() {
-                    len_group_references += 1;
+            if is_match && parser.group_level > 0 {
+                let len_group_references = parser.group_references.len();
+                for i in 0 .. parser.group_level {
+                    let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
+                    let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched.to_string();
+                    parser.group_references.insert(format!("\\{}", where_to_add), new_group);
                 }
-                else {
-                    add_to_group = parser.group_references.get(&format!("\\{}", len_group_references)).unwrap().to_string() + &add_to_group;
-                }
-                parser.group_references.insert(format!("\\{}", len_group_references), add_to_group);
+                
+                println!("GR1 -> group_references: {:?}", parser.group_references);
             }
             if is_match {
                 match quantifier {
@@ -436,25 +436,37 @@ impl Parser {
                             input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
                             let mut new_parser = parser.clone();
                             println!("[2+] -> input_check: \"{}\", new_parser: {:?}", input_check, new_parser.chars.clone().into_iter().collect::<String>());
-                            let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, &mut new_parser, true, None, false, is_group);
+                            let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, &mut new_parser, true, None, false);
                             println!("[3+] -> flag: {}, len: {}, matched_inside: {}", flag, len, matched_inside);
                             if flag {
                                 matched.push_str(&matched_inside);
-                                if is_group {
+                                if parser.group_level > 0 {
                                     let len_group_references = parser.group_references.len();
-                                    parser.group_references.insert(format!("\\{}", len_group_references), matched.to_string());
+                                    // add to group reference to all group references bigger and equal to group_level
+                                    for i in 0 .. parser.group_level {
+                                        let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
+                                        let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched_inside.to_string();
+                                        parser.group_references.insert(format!("\\{}", where_to_add), new_group);
+                                    }
+                                    println!("GR2 -> group_references: {:?}", parser.group_references);
+                                    // parser.group_references.insert(format!("\\{}", parser.group_level), matched.to_string());
                                 }
                                 return (true, len, matched);
                             }
                             else {
                                 println!("[4+] -> input_check: \"{}\", token: {:?}", input_check, token);
-                                let (is_matched_inside, len_inside, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special, is_group);
+                                let (is_matched_inside, len_inside, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special);
                                 println!("[5+] -> is_matched_inside: {}, len_inside: {}, matched_inside: {}", is_matched_inside, len_inside, matched_inside);
                                 if is_matched_inside {
                                     matched.push_str(&matched_inside);
-                                    if is_group {
+                                    if parser.group_level > 0 {
                                         let len_group_references = parser.group_references.len();
-                                        parser.group_references.insert(format!("\\{}", len_group_references), matched.to_string());
+                                        for i in 0 .. parser.group_level {
+                                            let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
+                                            let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched_inside.to_string();
+                                            parser.group_references.insert(format!("\\{}", where_to_add), new_group);
+                                        }
+                                        println!("GR3 -> group_references: {:?}", parser.group_references);
                                     }
                                     atom_len = len_inside;
                                 }
@@ -466,7 +478,7 @@ impl Parser {
                     }
                     Some('?') | None => {
                         input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
-                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, None, false, is_group);
+                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, None, false);
                         matched.push_str(&matched_inside);
                         return (flag, atom_len as i32 + len, matched);
                     }
@@ -476,7 +488,7 @@ impl Parser {
             }
             else {
                 if quantifier.is_some() && quantifier.unwrap() == '?' {
-                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, Some(is_special), false, is_group);
+                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, Some(is_special), false);
                     matched.push_str(&matched_inside);
                     if flag {
                         return (true, len, matched);
