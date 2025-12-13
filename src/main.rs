@@ -2,10 +2,15 @@ mod parse;
 use std::env;
 use std::process;
 use std::io;
+use env_logger;
 
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
+// for full debug logs, set the RUST_LOG environment variable to "debug": RUST_LOG=codecrafters_grep=debug
+
 fn main() {
+
+    env_logger::Builder::from_default_env().init();
 
     if env::args().nth(1).unwrap() != "-E" {
         println!("Expected first argument to be '-E'");
