@@ -31,10 +31,10 @@ fn main() {
         let reader = BufReader::new(file);
         for line in reader.lines() {
             let line_str = line.unwrap();
-            match_flag = parse::Parser::match_pattern(&line_str, &pattern);
-            if match_flag {
+            let match_flag_single_line = parse::Parser::match_pattern(&line_str, &pattern);
+            if match_flag_single_line {
+                match_flag = true;
                 println!("{}", line_str);
-                break;
             }
         }
     }
