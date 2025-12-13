@@ -25,16 +25,19 @@ fn main() {
     let mut match_flag: bool;
 
     if env::args().nth(3).is_some() {
+        // get all args after the second one
+        let file_paths = env::args().skip(2).collect::<Vec<String>>();
         match_flag = false;
-        let file_path = env::args().nth(3).unwrap();
-        let file = File::open(file_path).unwrap();
-        let reader = BufReader::new(file);
-        for line in reader.lines() {
-            let line_str = line.unwrap();
-            let match_flag_single_line = parse::Parser::match_pattern(&line_str, &pattern);
-            if match_flag_single_line {
-                match_flag = true;
-                println!("{}", line_str);
+        for file_path in file_paths {
+            let file = File::open(&file_path).unwrap();
+            let reader = BufReader::new(file);
+            for line in reader.lines() {
+                let line_str = line.unwrap();
+                let match_flag_single_line = parse::Parser::match_pattern(&line_str, &pattern);
+                if match_flag_single_line {
+                    match_flag = true;
+                        println!("{}:{}", &file_path, line_str);
+                }
             }
         }
     }
