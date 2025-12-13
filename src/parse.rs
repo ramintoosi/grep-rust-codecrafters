@@ -14,13 +14,14 @@ pub struct Parser {
     pub chars: Vec<char>,
     group_references: HashMap<String, String>,
     group_level: i32,
-    max_group_level: i32
+    max_group_level: i32,
+    active_groups: Vec<String>,
 }
 
 impl Parser {
 
     pub fn new(pattern: &str) -> Self {
-        Self {chars: pattern.chars().collect(), group_references: HashMap::new(), group_level: 0, max_group_level: 0}
+        Self {chars: pattern.chars().collect(), group_references: HashMap::new(), group_level: 0, max_group_level: 0, active_groups: Vec::new()}
     }
 
     pub fn next(&mut self) -> Option<char>{
@@ -352,12 +353,13 @@ impl Parser {
         let mut input_check = input.to_string();
         let mut is_special = true;
         
-        if parser.peek() == Some(')') {
+        while parser.peek() == Some(')') {
             parser.next();
             parser.group_level -= 1;
             if parser.group_level == 0 {
                 parser.max_group_level = 0;
             }
+            parser.active_groups.pop();
         }
 
 
@@ -395,7 +397,13 @@ impl Parser {
             }
         }
 
-        if let Some(Token::Parentheses((pattern, group_flag))) = &token {
+        while let Some(Token::Parentheses((pattern, group_flag))) = &token {
+            
+            parser.group_level += 1;
+            parser.max_group_level += 1;
+            parser.group_references.insert(format!("\\{}", parser.group_references.len() + 1), "".to_string());
+            parser.active_groups.push(format!("\\{}", parser.group_references.len()));
+
             if *group_flag {
                 // add new parser chars to the start of the parser and ) will be the sign for the end of the group
                 let pattern_to_add = pattern.chars().skip(1).collect::<String>();
@@ -405,10 +413,8 @@ impl Parser {
             else {
                 // just add ) to the start of the parser so we can know when group is ended
                 parser.chars.insert(0, ')');
+                break;
             }
-            parser.group_level += 1;
-            parser.max_group_level += 1;
-            parser.group_references.insert(format!("\\{}", parser.group_references.len() + 1), "".to_string());
         }
 
         println!("-> TOKEN: {:?} group_level: {}/{}, pattern: {}", token, parser.group_level, parser.max_group_level, parser.chars.clone().into_iter().collect::<String>());
@@ -418,17 +424,22 @@ impl Parser {
         if let Some(token) = token {
             let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special);
             println!("-> is_match: {}, atom_len: {}, matched: {}, token: {:?}, quantifier: {:?}", is_match, atom_len, matched, token, quantifier);
-            if is_match && parser.group_level > 0 {
-                let len_group_references = parser.group_references.len();
-                for i in 0 .. parser.group_level {
-                    let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
-                    let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched.to_string();
-                    parser.group_references.insert(format!("\\{}", where_to_add), new_group);
-                }
+            // if is_match && parser.group_level > 0 {
+            //     let len_group_references = parser.group_references.len();
+            //     for i in 0 .. parser.group_level {
+            //         let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
+            //         let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched.to_string();
+            //         parser.group_references.insert(format!("\\{}", where_to_add), new_group);
+            //     }
                 
-                println!("GR1 -> group_references: {:?}", parser.group_references);
-            }
+            //     println!("GR1 -> group_references: {:?}", parser.group_references);
+            // }
             if is_match {
+                for group in &parser.active_groups {
+                    let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched.to_string();
+                    parser.group_references.insert(group.clone(), string_to_add);
+                }
+                println!("GR1 -> group_references: {:?}", parser.group_references);
                 match quantifier {
                     Some('+') => {
                         loop {
@@ -440,17 +451,22 @@ impl Parser {
                             println!("[3+] -> flag: {}, len: {}, matched_inside: {}", flag, len, matched_inside);
                             if flag {
                                 matched.push_str(&matched_inside);
-                                if parser.group_level > 0 {
-                                    let len_group_references = parser.group_references.len();
-                                    // add to group reference to all group references bigger and equal to group_level
-                                    for i in 0 .. parser.group_level {
-                                        let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
-                                        let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched_inside.to_string();
-                                        parser.group_references.insert(format!("\\{}", where_to_add), new_group);
-                                    }
-                                    println!("GR2 -> group_references: {:?}", parser.group_references);
-                                    // parser.group_references.insert(format!("\\{}", parser.group_level), matched.to_string());
+                                for group in &parser.active_groups {
+                                    let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched.to_string();
+                                    parser.group_references.insert(group.clone(), string_to_add);
                                 }
+                                println!("GR2 -> group_references: {:?}", parser.group_references);
+                                // if parser.group_level > 0 {
+                                //     let len_group_references = parser.group_references.len();
+                                //     // add to group reference to all group references bigger and equal to group_level
+                                //     for i in 0 .. parser.group_level {
+                                //         let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
+                                //         let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched_inside.to_string();
+                                //         parser.group_references.insert(format!("\\{}", where_to_add), new_group);
+                                //     }
+                                //     println!("GR2 -> group_references: {:?}", parser.group_references);
+                                //     // parser.group_references.insert(format!("\\{}", parser.group_level), matched.to_string());
+                                // }
                                 return (true, len, matched);
                             }
                             else {
@@ -459,15 +475,20 @@ impl Parser {
                                 println!("[5+] -> is_matched_inside: {}, len_inside: {}, matched_inside: {}", is_matched_inside, len_inside, matched_inside);
                                 if is_matched_inside {
                                     matched.push_str(&matched_inside);
-                                    if parser.group_level > 0 {
-                                        let len_group_references = parser.group_references.len();
-                                        for i in 0 .. parser.group_level {
-                                            let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
-                                            let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched_inside.to_string();
-                                            parser.group_references.insert(format!("\\{}", where_to_add), new_group);
-                                        }
-                                        println!("GR3 -> group_references: {:?}", parser.group_references);
+                                    // if parser.group_level > 0 {
+                                    //     let len_group_references = parser.group_references.len();
+                                    //     for i in 0 .. parser.group_level {
+                                    //         let where_to_add = len_group_references - (parser.max_group_level - i as i32) as usize + 1;
+                                    //         let new_group = parser.group_references.get(&format!("\\{}", where_to_add)).unwrap().to_string() + &matched_inside.to_string();
+                                    //         parser.group_references.insert(format!("\\{}", where_to_add), new_group);
+                                    //     }
+                                    //     println!("GR3 -> group_references: {:?}", parser.group_references);
+                                    // }
+                                    for group in &parser.active_groups {
+                                        let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched_inside.to_string();
+                                        parser.group_references.insert(group.clone(), string_to_add);
                                     }
+                                    println!("GR3 -> group_references: {:?}", parser.group_references);
                                     atom_len = len_inside;
                                 }
                                 else {

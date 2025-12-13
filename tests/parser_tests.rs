@@ -790,4 +790,14 @@ mod tests_match_pattern {
         assert!(Parser::match_pattern("\"cat and cat\" is the same as \"cat and cat\"", "(\"(cat) and \\2\") is the same as \\1"));
     }
 
+    #[test]
+    fn test_backreference_nested_groups_with_three_levels() {
+        // ((\\w\\w\\w\\w) (\\d\\d\\d)) is doing \\2 \\3 times, and again \\1 times
+        // Group 1: ((\\w\\w\\w\\w) (\\d\\d\\d)) captures "grep 101"
+        // Group 2: (\\w\\w\\w\\w) captures "grep"
+        // Group 3: (\\d\\d\\d) captures "101"
+        // \\2 matches "grep", \\3 matches "101", \\1 matches "grep 101"
+        assert!(Parser::match_pattern("grep 101 is doing grep 101 times, and again grep 101 times", "((\\w\\w\\w\\w) (\\d\\d\\d)) is doing \\2 \\3 times, and again \\1 times"));
+    }
+
 }
