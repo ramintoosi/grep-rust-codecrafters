@@ -3,6 +3,9 @@ use std::env;
 use std::process;
 use std::io;
 use env_logger;
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
 
 
 // Usage: echo <input_text> | your_program.sh -E <pattern>
@@ -18,12 +21,29 @@ fn main() {
     }
 
     let pattern = env::args().nth(2).unwrap();
-    let mut input_line = String::new();
 
-    io::stdin().read_line(&mut input_line).unwrap();
+    let mut match_flag: bool;
 
-    // Uncomment this block to pass the first stage
-    let match_flag = parse::Parser::match_pattern(&input_line, &pattern);
+    if env::args().nth(3).is_some() {
+        match_flag = false;
+        let file_path = env::args().nth(3).unwrap();
+        let file = File::open(file_path).unwrap();
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line_str = line.unwrap();
+            match_flag = parse::Parser::match_pattern(&line_str, &pattern);
+            if match_flag {
+                println!("{}", line_str);
+                break;
+            }
+        }
+    }
+    else {
+        let mut input_line = String::new();
+        io::stdin().read_line(&mut input_line).unwrap();
+        match_flag = parse::Parser::match_pattern(&input_line, &pattern);
+    }
+    
     if match_flag {
         process::exit(0)
     } else {
