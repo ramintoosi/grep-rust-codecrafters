@@ -26,8 +26,9 @@ fn main() {
 
     if env::args().nth(3).is_some() {
         // get all args after the second one
-        let file_paths = env::args().skip(2).collect::<Vec<String>>();
+        let file_paths = env::args().skip(3).collect::<Vec<String>>();
         match_flag = false;
+        let len_file_paths = file_paths.len();
         for file_path in file_paths {
             let file = File::open(&file_path).unwrap();
             let reader = BufReader::new(file);
@@ -36,7 +37,12 @@ fn main() {
                 let match_flag_single_line = parse::Parser::match_pattern(&line_str, &pattern);
                 if match_flag_single_line {
                     match_flag = true;
+                    if len_file_paths > 1 {
                         println!("{}:{}", &file_path, line_str);
+                    }
+                    else {
+                        println!("{}", line_str);
+                    }
                 }
             }
         }
