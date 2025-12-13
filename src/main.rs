@@ -10,7 +10,7 @@ use env_logger;
 
 fn main() {
 
-    env_logger::Builder::from_default_env().init();
+    env_logger::init();
 
     if env::args().nth(1).unwrap() != "-E" {
         println!("Expected first argument to be '-E'");
