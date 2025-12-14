@@ -707,6 +707,214 @@ mod tests_match_pattern {
         assert!(Parser::match_pattern("123-456-7890", "\\d+-\\d+-\\d+"));
     }
 
+    // Star quantifier tests (zero or more)
+    #[test]
+    fn test_star_quantifier_zero_as() {
+        // ca*t matches "ct" (zero "a"s)
+        assert!(Parser::match_pattern("ct", "ca*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_three_as() {
+        // ca*t matches "caaat" (three "a"s)
+        assert!(Parser::match_pattern("caaat", "ca*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_no_match_dog() {
+        // ca*t does not match "dog" (no match for the pattern)
+        assert!(!Parser::match_pattern("dog", "ca*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_digit_zero_digits() {
+        // k\d*t matches "kt" (zero digits)
+        assert!(Parser::match_pattern("kt", "k\\d*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_digit_one_digit() {
+        // k\d*t matches "k1t" (one digit)
+        assert!(Parser::match_pattern("k1t", "k\\d*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_digit_no_match_letters() {
+        // k\d*t does not match "kabct" (has letters, not digits)
+        assert!(!Parser::match_pattern("kabct", "k\\d*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_char_class_zero_chars() {
+        // k[abc]*t matches "kt" (zero characters)
+        assert!(Parser::match_pattern("kt", "k[abc]*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_char_class_one_char() {
+        // k[abc]*t matches "kat" (one character from the set)
+        assert!(Parser::match_pattern("kat", "k[abc]*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_char_class_multiple_chars() {
+        // k[abc]*t matches "kabct" (multiple characters from the set)
+        assert!(Parser::match_pattern("kabct", "k[abc]*t"));
+    }
+
+    #[test]
+    fn test_star_quantifier_char_class_no_match_invalid_chars() {
+        // k[abc]*t does not match "kaxyzt" (contains "x", "y", "z" which aren't in [abc])
+        assert!(!Parser::match_pattern("kaxyzt", "k[abc]*t"));
+    }
+
+    // Exact quantifier {n} tests
+    #[test]
+    fn test_exact_quantifier_three_as() {
+        // ca{3}t matches "caaat" (exactly three "a"s)
+        assert!(Parser::match_pattern("caaat", "ca{3}t"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_two_as_no_match() {
+        // ca{3}t does not match "caat" (only two "a"s)
+        assert!(!Parser::match_pattern("caat", "ca{3}t"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_four_as_no_match() {
+        // ca{3}t does not match "caaaat" (too many "a"s)
+        assert!(!Parser::match_pattern("caaaat", "ca{3}t"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_digit_two_digits() {
+        // d\d{2}g matches "d42g" (exactly two digits)
+        assert!(Parser::match_pattern("d42g", "d\\d{2}g"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_digit_one_digit_no_match() {
+        // d\d{2}g does not match "d1g" (only one digit)
+        assert!(!Parser::match_pattern("d1g", "d\\d{2}g"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_digit_three_digits_no_match() {
+        // d\d{2}g does not match "d123g" (too many digits)
+        assert!(!Parser::match_pattern("d123g", "d\\d{2}g"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_char_class_four_chars() {
+        // c[xyz]{4}w matches "czyxzw" (exactly four characters from [xyz])
+        assert!(Parser::match_pattern("czyxzw", "c[xyz]{4}w"));
+    }
+
+    #[test]
+    fn test_exact_quantifier_char_class_three_chars_no_match() {
+        // c[xyz]{4}w does not match "cxyzw" (only three characters from [xyz])
+        assert!(!Parser::match_pattern("cxyzw", "c[xyz]{4}w"));
+    }
+
+    // At least n quantifier {n,} tests
+    #[test]
+    fn test_at_least_quantifier_two_as_exact() {
+        // ca{2,}t matches "caat" (exactly two "a"s)
+        assert!(Parser::match_pattern("caat", "ca{2,}t"));
+    }
+
+    #[test]
+    fn test_at_least_quantifier_six_as() {
+        // ca{2,}t matches "caaaaat" (six "a"s)
+        assert!(Parser::match_pattern("caaaaat", "ca{2,}t"));
+    }
+
+    #[test]
+    fn test_at_least_quantifier_one_a_no_match() {
+        // ca{2,}t does not match "cat" (only one "a")
+        assert!(!Parser::match_pattern("cat", "ca{2,}t"));
+    }
+
+    #[test]
+    fn test_at_least_quantifier_digit_four_digits() {
+        // x\d{3,}y matches "x9999y" (four digits)
+        assert!(Parser::match_pattern("x9999y", "x\\d{3,}y"));
+    }
+
+    #[test]
+    fn test_at_least_quantifier_digit_two_digits_no_match() {
+        // x\d{3,}y does not match "x42y" (only two digits)
+        assert!(!Parser::match_pattern("x42y", "x\\d{3,}y"));
+    }
+
+    #[test]
+    fn test_at_least_quantifier_char_class_five_vowels() {
+        // b[aeiou]{2,}r matches "baeiour" (five vowels)
+        assert!(Parser::match_pattern("baeiour", "b[aeiou]{2,}r"));
+    }
+
+    #[test]
+    fn test_at_least_quantifier_char_class_one_vowel_no_match() {
+        // b[aeiou]{2,}r does not match "bar" (only one vowel)
+        assert!(!Parser::match_pattern("bar", "b[aeiou]{2,}r"));
+    }
+
+    // Range quantifier {n,m} tests
+    #[test]
+    fn test_range_quantifier_two_as() {
+        // ca{2,4}t matches "caat" (two "a"s are within range)
+        assert!(Parser::match_pattern("caat", "ca{2,4}t"));
+    }
+
+    #[test]
+    fn test_range_quantifier_three_as() {
+        // ca{2,4}t matches "caaat" (three "a"s are within range)
+        assert!(Parser::match_pattern("caaat", "ca{2,4}t"));
+    }
+
+    #[test]
+    fn test_range_quantifier_four_as() {
+        // ca{2,4}t matches "caaaat" (four "a"s are within range)
+        assert!(Parser::match_pattern("caaaat", "ca{2,4}t"));
+    }
+
+    #[test]
+    fn test_range_quantifier_five_as_no_match() {
+        // ca{2,4}t does not match "caaaaat" (five "a"s are above the maximum)
+        assert!(!Parser::match_pattern("caaaaat", "ca{2,4}t"));
+    }
+
+    #[test]
+    fn test_range_quantifier_digit_three_digits() {
+        // n\d{1,3}m matches "n123m" (three digits are within range)
+        assert!(Parser::match_pattern("n123m", "n\\d{1,3}m"));
+    }
+
+    #[test]
+    fn test_range_quantifier_digit_four_digits_no_match() {
+        // n\d{1,3}m does not match "n1234m" (four digits are above the maximum)
+        assert!(!Parser::match_pattern("n1234m", "n\\d{1,3}m"));
+    }
+
+    #[test]
+    fn test_range_quantifier_char_class_three_chars() {
+        // p[xyz]{2,3}q matches "pzzzq" (three characters are within range)
+        assert!(Parser::match_pattern("pzzzq", "p[xyz]{2,3}q"));
+    }
+
+    #[test]
+    fn test_range_quantifier_char_class_one_char_no_match() {
+        // p[xyz]{2,3}q does not match "pxq" (one character is below the minimum)
+        assert!(!Parser::match_pattern("pxq", "p[xyz]{2,3}q"));
+    }
+
+    #[test]
+    fn test_range_quantifier_char_class_four_chars_no_match() {
+        // p[xyz]{2,3}q does not match "pxyzyq" (four characters are above the maximum)
+        assert!(!Parser::match_pattern("pxyzyq", "p[xyz]{2,3}q"));
+    }
+
     // Backreference tests
     #[test]
     fn test_backreference_cat_and_cat() {
