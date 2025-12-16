@@ -39,7 +39,7 @@ impl Parser {
         let mut literal = String::new();
 
         let specials = ".^$|()[]\\";
-        let quantifiers = "+?";
+        let quantifiers = "+?*";
 
         while let Some(c) = self.peek() {
             if specials.contains(c) {
@@ -118,12 +118,24 @@ impl Parser {
     }
 
     pub fn parse_quantifier(&mut self) -> Option<char> {
+        log::debug!("[QUANTIFIER] -> chars: {:?}", self.chars);
         if let Some(c) = self.peek() {
-            if c == '+' || c == '?' {
+            if c == '+' || c == '?' || c == '*' {
                 self.next();
                 return Some(c)
             }
+            else if self.peek() == Some(')') {
+                // in this situation we need to check if the second next is a quantifier
+                if let Some(c) = self.chars.get(1).cloned() {
+                    if c == '+' || c == '?' || c == '*' {
+                        self.chars.remove(1);
+                        return Some(c);
+                    }
+                }
+                
+            }
         }
+        
         None
     }
 
@@ -410,21 +422,21 @@ impl Parser {
             }
         }
 
-        log::debug!("-> TOKEN: {:?}, active_groups: {:?}, pattern: {}", token, parser.active_groups, parser.chars.clone().into_iter().collect::<String>());
-        
         let quantifier = parser.parse_quantifier();
+
+        log::debug!("[TOKEN] {:?}, active_groups: {:?}, pattern: {} quantifier: {:?}", token, parser.active_groups, parser.chars.clone().into_iter().collect::<String>(), quantifier);
 
         if let Some(token) = token {
             let (is_match, mut atom_len, mut matched) =  Self::match_token_atom(&input_check, &token, start_anchor, &parser.group_references, is_special);
-            log::debug!("-> is_match: {}, atom_len: {}, matched: {}, token: {:?}, quantifier: {:?}", is_match, atom_len, matched, token, quantifier);
+            log::debug!("[FIRST MATCH]: is_match: {}, atom_len: {}, matched: {}, token: {:?}, quantifier: {:?}", is_match, atom_len, matched, token, quantifier);
             if is_match {
                 for group in &parser.active_groups {
                     let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched.to_string();
                     parser.group_references.insert(group.clone(), string_to_add);
                 }
-                log::debug!("GR1 -> group_references: {:?}", parser.group_references);
+                log::debug!("[GR1] -> group_references: {:?}", parser.group_references);
                 match quantifier {
-                    Some('+') => {
+                    Some('+') | Some('*') => {
                         loop {
                             log::debug!("[1+] -> atom_len: {}, input_check: \"{}\"", atom_len, input_check);
                             input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
@@ -438,7 +450,7 @@ impl Parser {
                                     let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched.to_string();
                                     parser.group_references.insert(group.clone(), string_to_add);
                                 }
-                                log::debug!("GR2 -> group_references: {:?}", parser.group_references);
+                                log::debug!("[GR2] -> group_references: {:?}", parser.group_references);
                                 return (true, len, matched);
                             }
                             else {
@@ -451,7 +463,7 @@ impl Parser {
                                         let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched_inside.to_string();
                                         parser.group_references.insert(group.clone(), string_to_add);
                                     }
-                                    log::debug!("GR3 -> group_references: {:?}", parser.group_references);
+                                    log::debug!("[GR3] -> group_references: {:?}", parser.group_references);
                                     atom_len = len_inside;
                                 }
                                 else {
@@ -462,7 +474,7 @@ impl Parser {
                     }
                     Some('?') | None => {
                         input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
-                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, None, false);
+                        let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, true, None, false);
                         matched.push_str(&matched_inside);
                         return (flag, atom_len as i32 + len, matched);
                     }
@@ -471,8 +483,8 @@ impl Parser {
                 
             }
             else {
-                if quantifier.is_some() && quantifier.unwrap() == '?' {
-                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, false, Some(is_special), false);
+                if quantifier.is_some() && (quantifier.unwrap() == '?' || quantifier.unwrap() == '*') {
+                    let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, true, Some(is_special), false);
                     matched.push_str(&matched_inside);
                     if flag {
                         return (true, len, matched);
