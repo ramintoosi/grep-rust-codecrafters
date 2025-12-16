@@ -1,6 +1,13 @@
 use std::collections::HashMap;
 use log;
 
+#[derive(Debug, PartialEq)]
+pub enum QuantifierType {
+    Plus,
+    Question,
+    Star,
+    Repitition((i32, i32))
+}
 
 #[derive(Debug, PartialEq)]
 enum Token {
@@ -39,7 +46,7 @@ impl Parser {
         let mut literal = String::new();
 
         let specials = ".^$|()[]\\";
-        let quantifiers = "+?*";
+        let quantifiers = "+?*{";
 
         while let Some(c) = self.peek() {
             if specials.contains(c) {
@@ -117,22 +124,60 @@ impl Parser {
         else {None}
     }
 
-    pub fn parse_quantifier(&mut self) -> Option<char> {
+    pub fn parse_quantifier(&mut self) -> Option<QuantifierType> {
         log::debug!("[QUANTIFIER] -> chars: {:?}", self.chars);
+        let quantifiers = "+?*{";
         if let Some(c) = self.peek() {
-            if c == '+' || c == '?' || c == '*' {
+            let mut quantifier_string: Option<char> = None;
+            if quantifiers.contains(c) {
+                quantifier_string = Some(c);
                 self.next();
-                return Some(c)
             }
             else if self.peek() == Some(')') {
                 // in this situation we need to check if the second next is a quantifier
                 if let Some(c) = self.chars.get(1).cloned() {
-                    if c == '+' || c == '?' || c == '*' {
+                    if quantifiers.contains(c) {
+                        quantifier_string = Some(c);
                         self.chars.remove(1);
-                        return Some(c);
                     }
                 }
-                
+            }
+            else {
+                return None;
+            }
+            match quantifier_string {
+                Some('+') => return Some(QuantifierType::Plus),
+                Some('?') => return Some(QuantifierType::Question),
+                Some('*') => return Some(QuantifierType::Star),
+                Some('{') => {
+                    let mut result = String::new();
+                    while let Some(c) = self.next() {
+                        result.push(c);
+                        if c == '}' {
+                            result.pop(); // remove the }
+                            let numbers = result
+                            .split(',')
+                            .filter(|x| !x.is_empty())
+                            .map(|x| x.parse::<i32>().unwrap())
+                            .collect::<Vec<i32>>();
+                            if numbers.len() == 1 {
+                                if result.ends_with(',') {
+                                    return Some(QuantifierType::Repitition((numbers[0], i32::MAX)));
+                                }
+                                return Some(QuantifierType::Repitition((numbers[0], numbers[0])));
+                            }
+                            else if numbers.len() == 2 {
+                                return Some(QuantifierType::Repitition((numbers[0], numbers[1])));
+                            }
+                            else {
+                                panic!("Invalid quantifier repetition");
+                            }
+                        }
+                    }
+                    panic!("Unclosed quantifier repetition");
+                }
+                None => return None,
+                _ => panic!("Invalid quantifier")
             }
         }
         
@@ -436,7 +481,7 @@ impl Parser {
                 }
                 log::debug!("[GR1] -> group_references: {:?}", parser.group_references);
                 match quantifier {
-                    Some('+') | Some('*') => {
+                    Some(QuantifierType::Plus) | Some(QuantifierType::Star) => {
                         loop {
                             log::debug!("[1+] -> atom_len: {}, input_check: \"{}\"", atom_len, input_check);
                             input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
@@ -472,7 +517,7 @@ impl Parser {
                             }
                         }
                     }
-                    Some('?') | None => {
+                    Some(QuantifierType::Question) | None => {
                         input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
                         let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, true, None, false);
                         matched.push_str(&matched_inside);
@@ -483,7 +528,7 @@ impl Parser {
                 
             }
             else {
-                if quantifier.is_some() && (quantifier.unwrap() == '?' || quantifier.unwrap() == '*') {
+                if quantifier.is_some() && (quantifier == Some(QuantifierType::Question) || quantifier == Some(QuantifierType::Star)) {
                     let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, true, Some(is_special), false);
                     matched.push_str(&matched_inside);
                     if flag {
@@ -496,7 +541,7 @@ impl Parser {
         }
         else {
             if quantifier.is_some() {
-                if quantifier.unwrap() == '?' {return (true, 0, matched);}
+                if quantifier.unwrap() == QuantifierType::Question {return (true, 0, matched);}
             return (false, 0, matched);
             }
         }

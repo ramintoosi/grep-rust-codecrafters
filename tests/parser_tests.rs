@@ -1,4 +1,5 @@
 use codecrafters_grep::parse::Parser;
+use codecrafters_grep::parse::QuantifierType;
 
 #[cfg(test)]
 mod tests_internal_functions {
@@ -101,7 +102,7 @@ mod tests_internal_functions {
     fn test_parse_quantifier_plus() {
         let mut parser = Parser::new("+next");
         let q = parser.parse_quantifier();
-        assert_eq!(q, Some('+'));
+        assert_eq!(q, Some(QuantifierType::Plus));
         assert_eq!(parser.chars.into_iter().collect::<String>(), "next");
     }
 
@@ -109,8 +110,16 @@ mod tests_internal_functions {
     fn test_parse_quantifier_question() {
         let mut parser = Parser::new("?abc");
         let q = parser.parse_quantifier();
-        assert_eq!(q, Some('?'));
+        assert_eq!(q, Some(QuantifierType::Question));
         assert_eq!(parser.chars.into_iter().collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn test_parse_quantifier_star() {
+        let mut parser = Parser::new("*bat");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, Some(QuantifierType::Star));
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "bat");
     }
 
     #[test]
@@ -119,6 +128,31 @@ mod tests_internal_functions {
         let q = parser.parse_quantifier();
         assert_eq!(q, None);
         assert_eq!(parser.chars.into_iter().collect::<String>(), "abc"); // unchanged
+    }
+
+    // Tests for parse_quantifier with {} syntax
+    #[test]
+    fn test_parse_quantifier_exact_n() {
+        let mut parser = Parser::new("{3}abc");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, Some(QuantifierType::Repitition((3, 3))));
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "abc");
+    }
+
+    #[test]
+    fn test_parse_quantifier_at_least_n() {
+        let mut parser = Parser::new("{2,}def");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, Some(QuantifierType::Repitition((2, i32::MAX))));
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "def");
+    }
+
+    #[test]
+    fn test_parse_quantifier_range_n_m() {
+        let mut parser = Parser::new("{2,5}ghi");
+        let q = parser.parse_quantifier();
+        assert_eq!(q, Some(QuantifierType::Repitition((2, 5))));
+        assert_eq!(parser.chars.into_iter().collect::<String>(), "ghi");
     }
 
     // Tests for parse_start_anchor
