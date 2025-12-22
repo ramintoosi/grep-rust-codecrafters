@@ -152,9 +152,13 @@ impl Parser {
                 Some('{') => {
                     let mut result = String::new();
                     while let Some(c) = self.next() {
+                        if c == ')' {
+                            continue;
+                        }
                         result.push(c);
                         if c == '}' {
                             result.pop(); // remove the }
+                            log::debug!("[QUANTIFIER] -> [REP]: \"{}\"", result);
                             let numbers = result
                             .split(',')
                             .filter(|x| !x.is_empty())
@@ -523,7 +527,79 @@ impl Parser {
                         matched.push_str(&matched_inside);
                         return (flag, atom_len as i32 + len, matched);
                     }
-                    _ => {panic!("Invalid quantifier")}
+                    Some(QuantifierType::Repitition((n, m))) => {
+                        // we already matched 1, so we need to match at least n-1 times
+                        input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
+                        log::debug!("[REP START] -> input_check: \"{}\", m: {}, n: {}", input_check, m, n);
+                        for _ in 0..n-1 {
+                            let (flag, atom_len, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special);
+                            input_check = Self::slice_based_on_char(&input_check, atom_len as usize);
+                            if flag {
+                                matched.push_str(&matched_inside);
+                            }
+                            else {
+                                return (false, 0, matched);
+                            }
+                        }
+                        log::debug!("[REP - AFTER N] -> input_check: \"{}\"", input_check);
+                        for group in &parser.active_groups {
+                            let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched.to_string();
+                            parser.group_references.insert(group.clone(), string_to_add);
+                        }
+                        if m == n {
+                            let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, parser, true, Some(is_special), false);
+                            matched.push_str(&matched_inside);
+                            if flag {
+                                return (true, len, matched);
+                            }
+                        }
+                        else {
+                            let mut counter = n;
+                            
+                            loop {
+                                
+                                log::debug!("[REPMN] -> input_check: \"{}\", matched: \"{}\"", input_check, matched);
+                                let mut new_parser = parser.clone();
+                                let (flag, len, matched_inside) = Self::match_pattern_internal(&input_check, &mut new_parser, true, None, false);
+                                log::debug!("[REPMN] -> input_check: \"{}\", flag: {}, len: {}, matched_inside: {}", input_check, flag, len, matched_inside);
+                                
+                                if flag {
+                                    matched.push_str(&matched_inside);
+                                    for group in &parser.active_groups {
+                                        let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched.to_string();
+                                        parser.group_references.insert(group.clone(), string_to_add);
+                                    }
+                                    
+                                    return (true, len, matched);
+                                }
+                                else {
+                                    
+                                    let (is_matched_inside, len_inside, matched_inside) = Self::match_token_atom(&input_check, &token, true, &parser.group_references, is_special);
+                                    log::debug!("[REPMN] -> input_check: \"{}\", is_matched_inside: {}, len_inside: {}, matched_inside: {}", input_check, is_matched_inside, len_inside, matched_inside);
+                                    input_check = Self::slice_based_on_char(&input_check, len_inside as usize);
+                                    log::debug!("[REPMN] -> input_check: \"{}\"", input_check);
+                                    if is_matched_inside {
+                                        matched.push_str(&matched_inside);
+                                        for group in &parser.active_groups {
+                                            let string_to_add = parser.group_references.get(group).unwrap().to_string() + &matched_inside.to_string();
+                                            parser.group_references.insert(group.clone(), string_to_add);
+                                        }
+                                        
+                                    }
+                                    else {
+                                        return (false, 0, matched);
+                                    }
+                                }
+                                counter += 1;
+                                log::debug!("[REPMN] -> counter: {}, m: {}", counter, m);
+                                if counter > m {
+                                    return (false, 0, matched);
+                                }
+                            }
+                            
+                        }
+                        
+                    }
                 }
                 
             }
